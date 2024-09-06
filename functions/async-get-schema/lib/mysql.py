@@ -35,14 +35,25 @@ def convert_schema(type):
             return "varchar"
         else:
             return "string"
+    if "bigint" == type:
+        return "bigint"
+    elif "smallint" == type:
+        return "smallint"
     elif "int" in type:
-        if ("bigint" in type):
-            return "bigint"
-        else:
-            return "int"
+        return "int"
     elif "date" in type:
         return "date"
     elif "enum" in type:
+        return "string"
+    elif type in ["text", "longtext", "mediumtext", "tinytext"]:
+        return "string"
+    elif "decimal" in type:
+        return "decimal"
+    elif "json" in type:
+        return "string"
+    elif "uuid" == type:
+        return "string"
+    else:
         return "string"
 
 

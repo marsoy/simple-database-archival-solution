@@ -1,18 +1,3 @@
-""" 
-Copyright 2023 Amazon.com, Inc. and its affiliates. All Rights Reserved.
-
-Licensed under the Amazon Software License (the "License").
-You may not use this file except in compliance with the License.
-A copy of the License is located at
-
-  http://aws.amazon.com/asl/
-
-or in the "license" file accompanying this file. This file is distributed
-on an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either
-express or implied. See the License for the specific language governing
-permissions and limitations under the License.
-"""
-
 import json
 import boto3
 import logging
@@ -21,10 +6,6 @@ import traceback
 import datetime
 import uuid
 import pytz
-
-from constants import ARCHIVE_DATABASE_TABLES
-
-# region Logging
 
 LOG_LEVEL = os.getenv("LOG_LEVEL", "INFO")
 logger = logging.getLogger()
@@ -71,25 +52,23 @@ def build_response(http_code, body):
 
 def lambda_handler(event, context):
     logger.info(mask_sensitive_data(event))
-
     try:
-
         parameter = ssm.get_parameter(
             Name="/archive/dynamodb-table", WithDecryption=True
         )
         body = json.loads(event["body"]) if "body" in event else json.loads(event)
         archive_name = body["archive_name"]
-
-        hostname = body["hostname"]
-        mode = body["mode"]
-        port = body["port"]
         username = body["username"]
         database = body["database"]
+        hostname = body["hostname"]
+        port = body["port"]
         database_engine = body["database_engine"]
         archival_start_date = body["archival_start_date"]
         archival_end_date = body["archival_end_date"]
-        table_details = []
-
+        tables = body["tables"]
+        compression = body["compression"]
+        partition_keys = body["partition_keys"]
+        glue_worker_details = body["glue_worker_details"]
         try:
             secret_value = secret_client.get_secret_value(
                 SecretId=f"{database}-{username}"
@@ -101,19 +80,6 @@ def lambda_handler(event, context):
             )
             return build_response(500, "Server Error")
 
-        archive_tables = ARCHIVE_DATABASE_TABLES.get(database, [])
-        for table in body["tables"]:
-            table_name = table["table"]
-            if archive_tables and table_name not in archive_tables:
-                print(
-                    f"Skipped database_engine: {database_engine} database: {database} table {table_name} in create archive"
-                )
-                continue
-            table["count_validation"] = {}
-            table["string_validation"] = {}
-            table["number_validation"] = {}
-            table_details.append(table)
-
         archive_id = str(uuid.uuid4())
         table = dynamodb_client.Table(parameter["Parameter"]["Value"])
         dt = datetime.datetime.now(pytz.UTC)
@@ -123,7 +89,7 @@ def lambda_handler(event, context):
                 "id": archive_id,
                 "database_engine": database_engine,
                 "archive_name": archive_name,
-                "mode": mode,
+                "mode": "Read",
                 "hostname": hostname,
                 "port": port,
                 "username": username,
@@ -132,13 +98,18 @@ def lambda_handler(event, context):
                 "oracle_owner": body["oracle_owner"] if "oracle_owner" in body else "",
                 "archival_start_date": archival_start_date,
                 "archival_end_date": archival_end_date,
-                "table_details": table_details,
+                "table_details": [],
                 "time_submitted": str(dt),
                 "archive_status": "Archive Queue",
                 "job_status": "",
                 "jobs": {},
                 "configuration": {
-                    "glue": {"glue_worker": "Standard", "glue_capacity": 2}
+                    "glue": {
+                        "glue_worker": glue_worker_details["glue_worker"],
+                        "glue_capacity": glue_worker_details["glue_capacity"],
+                    },
+                    "compression": compression,
+                    "partition_keys": partition_keys,
                 },
                 "counters": {
                     "validation": {
@@ -153,9 +124,7 @@ def lambda_handler(event, context):
             }
         )
 
-        response = {"text": "Example response from authenticated api"}
-        return build_response(200, json.dumps(response))
-    except Exception as ex:
+    except Exception as e:
         logger.error(traceback.format_exc())
         return build_response(500, "Server Error")
 

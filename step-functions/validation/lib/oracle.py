@@ -13,34 +13,32 @@ express or implied. See the License for the specific language governing
 permissions and limitations under the License.
 """
 
-import psycopg2
+import oracledb
+import traceback
+
 
 class Connection:
-    def __init__(self, hostname, port, username, password, database, schema):
-        self.host = hostname
+    def __init__(self, hostname, port, username, password, database, oracle_owner):
+        self.hostname = hostname
         self.port = port
-        self.user = username
+        self.username = username
         self.password = password
-        self.dbname = database
-        self.schema = schema
+        self.database = database
+        self.oracle_owner = oracle_owner
 
-    def testConnection(self):
-        
+    def get_query_results(self, query):
         try:
-
-            connection = psycopg2.connect(
-                host=self.host,
-                port=self.port,
-                user=self.user,
+            connection = oracledb.connect(
+                user=self.username,
                 password=self.password,
-                dbname=self.dbname)
+                dsn=f"{self.hostname}:{self.port}/{self.database}",
+            )
             cursor = connection.cursor()
-            cursor.execute("SELECT table_name FROM information_schema.tables WHERE table_schema='{schema}' AND table_type='BASE TABLE'".format(schema=self.schema))
-            cursor.fetchall()
-            cursor.close()
-
-            return True
-
+            cursor.execute(query)
+            response = cursor.fetchall()
+            return response
         except Exception as e:
-            print(e)
-            return False
+            print(traceback.format_exc())
+            raise
+        finally:
+            connection.close()

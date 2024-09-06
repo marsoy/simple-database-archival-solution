@@ -48,7 +48,19 @@ def directJDBCSource(
     )
 
 
-args = getResolvedOptions(sys.argv, ["JOB_NAME", "TABLE", "BUCKET", "DATABASE", "ARCHIVE_ID", "MAPPINGS", "OWNER", "CONNECTION"])
+args = getResolvedOptions(
+    sys.argv,
+    [
+        "JOB_NAME",
+        "TABLE",
+        "BUCKET",
+        "DATABASE",
+        "ARCHIVE_ID",
+        "MAPPINGS",
+        "OWNER",
+        "CONNECTION",
+    ],
+)
 sc = SparkContext()
 glueContext = GlueContext(sc)
 spark = glueContext.spark_session
@@ -57,7 +69,17 @@ job.init(args["JOB_NAME"], args)
 
 print(args)
 print(args["OWNER"] + "." + args["TABLE"])
-print("s3://" + args["BUCKET"] + "/" + args["ARCHIVE_ID"] + "/" + args["DATABASE"] + "/" + args["TABLE"] + "/")
+print(
+    "s3://"
+    + args["BUCKET"]
+    + "/"
+    + args["ARCHIVE_ID"]
+    + "/"
+    + args["DATABASE"]
+    + "/"
+    + args["TABLE"]
+    + "/"
+)
 
 # Script generated for node Oracle table
 OracleSQLtable_node1 = directJDBCSource(
@@ -84,8 +106,16 @@ S3bucket_node3 = glueContext.write_dynamic_frame.from_options(
     frame=OracleSQLtable_node1,
     connection_type="s3",
     format="glueparquet",
-        connection_options={
-        "path": "s3://" + args["BUCKET"] + "/" + args["ARCHIVE_ID"] + "/" + args["DATABASE"] + "/" + args["TABLE"] + "/",
+    connection_options={
+        "path": "s3://"
+        + args["BUCKET"]
+        + "/"
+        + args["ARCHIVE_ID"]
+        + "/"
+        + args["DATABASE"]
+        + "/"
+        + args["TABLE"]
+        + "/",
         "partitionKeys": [],
     },
     transformation_ctx="S3bucket_node3",

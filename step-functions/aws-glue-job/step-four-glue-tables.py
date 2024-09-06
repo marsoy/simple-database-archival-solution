@@ -17,71 +17,75 @@ import boto3
 import os
 
 REGION = os.getenv("REGION")
-client = boto3.client('glue', region_name=REGION)
-dynamodb = boto3.resource('dynamodb', region_name=REGION)
-ssm = boto3.client('ssm')
+client = boto3.client("glue", region_name=REGION)
+dynamodb = boto3.resource("dynamodb", region_name=REGION)
+ssm = boto3.client("ssm", region_name=REGION)
 
 
 def lambda_handler(event, context):
 
     # Get SSM Parameter for DynamoDB Table name
-    parameter = ssm.get_parameter(
-        Name='/archive/dynamodb-table', WithDecryption=True)
+    parameter = ssm.get_parameter(Name="/archive/dynamodb-table", WithDecryption=True)
 
     # Get SSM Parameter for S3 Bucket name
     bucketParameter = ssm.get_parameter(
-        Name='/job/s3-bucket-table-data', WithDecryption=True)
-    table = dynamodb.Table(parameter['Parameter']['Value'])
+        Name="/job/s3-bucket-table-data", WithDecryption=True
+    )
+    table = dynamodb.Table(parameter["Parameter"]["Value"])
 
     try:
         for tbl in event["Item"]["table_details"]:
             columns = []
             for schema in tbl["schema"]:
                 print(schema)
-                columns.append({'Name': schema["key"], 'Type': schema["value"],
-                                'Comment': ''})
+                columns.append(
+                    {"Name": schema["key"], "Type": schema["value"], "Comment": ""}
+                )
             try:
                 client.get_table(
-                    DatabaseName=f'{event["Item"]["id"]}-{event["Item"]["database"]}-database',
-                    Name=f'{event["Item"]["id"]}-{event["Item"]["database"]}-{tbl["table"]}-table',
+                    DatabaseName=f'{event["Item"]["database"]}-database',
+                    Name=f'{event["Item"]["database"]}-{tbl["table"]}-table',
                 )
-
             except:
-                bucketName = bucketParameter['Parameter']['Value']
+                bucketName = bucketParameter["Parameter"]["Value"]
                 client.create_table(
-                    DatabaseName=f'{event["Item"]["id"]}-{event["Item"]["database"]}-database',
+                    DatabaseName=f'{event["Item"]["database"]}-database',
                     TableInput={
-                        'Name': f'{event["Item"]["id"]}-{event["Item"]["database"]}-{tbl["table"]}-table',
-                        'Description': 'TO ADD',
-                        'StorageDescriptor': {
-                            'Columns': columns,
-                            'Location': f's3://{bucketName}/{event["Item"]["id"]}/{event["Item"]["database"]}/{tbl["table"]}',
-                            'InputFormat': 'org.apache.hadoop.hive.ql.io.parquet.MapredParquetInputFormat',
-                            'OutputFormat': 'org.apache.hadoop.hive.ql.io.parquet.MapredParquetOutputFormat',
-                            'Compressed': False,
-                            'SerdeInfo': {'SerializationLibrary': 'org.apache.hadoop.hive.ql.io.parquet.serde.ParquetHiveSerDe'}
+                        "Name": f'{event["Item"]["database"]}-{tbl["table"]}-table',
+                        "Description": "TO ADD",
+                        "StorageDescriptor": {
+                            "Columns": columns,
+                            "Location": f's3://{bucketName}/{event["Item"]["database"]}/{tbl["table"]}',
+                            "InputFormat": "org.apache.hadoop.hive.ql.io.parquet.MapredParquetInputFormat",
+                            "OutputFormat": "org.apache.hadoop.hive.ql.io.parquet.MapredParquetOutputFormat",
+                            "Compressed": False,
+                            "SerdeInfo": {
+                                "SerializationLibrary": "org.apache.hadoop.hive.ql.io.parquet.serde.ParquetHiveSerDe"
+                            },
                         },
-                        'TableType': "EXTERNAL_TABLE",
-                        'Parameters': {
-                            'classification': 'parquet',
-                            'typeOfData': 'file',
-                        }
-                    }
+                        "TableType": "EXTERNAL_TABLE",
+                        "Parameters": {
+                            "classification": "parquet",
+                            "typeOfData": "file",
+                        },
+                    },
                 )
             tbl["archive_id"] = event["Item"]["id"]
             tbl["database"] = event["Item"]["database"]
             tbl["database_engine"] = event["Item"]["database_engine"]
             tbl["oracle_owner"] = event["Item"]["oracle_owner"]
             tbl["oracle_owner"] = event["Item"]["oracle_owner"]
-            tbl["glue_capacity"] = event["Item"]["configuration"]["glue"]["glue_capacity"]
+            tbl["glue_capacity"] = event["Item"]["configuration"]["glue"][
+                "glue_capacity"
+            ]
             tbl["glue_worker"] = event["Item"]["configuration"]["glue"]["glue_worker"]
 
     except:
         table.update_item(
-            Key={'id': event["Item"]["id"]},
+            Key={"id": event["Item"]["id"]},
             UpdateExpression="SET archive_status= :s",
-            ExpressionAttributeValues={':s': 'Failed'},
-            ReturnValues="UPDATED_NEW"
+            ExpressionAttributeValues={":s": "Failed"},
+            ReturnValues="UPDATED_NEW",
         )
         raise
 

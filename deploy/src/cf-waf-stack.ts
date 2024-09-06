@@ -45,7 +45,7 @@ export class CfWafStack extends cdk.Stack {
 						sizeConstraintStatement: {
 							fieldToMatch: { body: {} },
 							comparisonOperator: 'LE',
-							size: 90000,
+							size: 250000,
 							textTransformations: [
 								{
 									priority: 0,

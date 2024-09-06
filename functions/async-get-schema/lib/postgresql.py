@@ -50,8 +50,10 @@ def convert_schema(type):
         return "string"
     elif "circle" in type:
         return "string"
-    elif "date" in type:
+    elif "date" == type:
         return "date"
+    elif "datetime" == type:
+        return "timestamp"
     elif "double precision" in type:
         return "decimal(38,6)"
     elif "inet" in type:

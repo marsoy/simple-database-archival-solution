@@ -35,14 +35,18 @@ def convert_schema(type):
             return "varchar"
         else:
             return "string"
-    if "bigint" == type:
+    elif ("boolean" == type or "tinyint(1)" == type):
+        return "boolean"
+    elif "bigint" == type:
         return "bigint"
     elif "smallint" == type:
         return "smallint"
     elif "int" in type:
         return "int"
-    elif "date" in type:
+    elif "date" == type:
         return "date"
+    elif "datetime" in type:
+        return "timestamp"
     elif "enum" in type:
         return "string"
     elif type in ["text", "longtext", "mediumtext", "tinytext"]:
@@ -99,7 +103,7 @@ class Connection:
                     for row in table_cursor.fetchall():
                         row_type = convert_schema(row["Type"])
                         row_list.append(
-                            {"key": row["Field"], "value": row_type, "existing": True})
+                            {"key": row["Field"], "value": row_type, "origin_type": row["Type"],  "existing": True})
                     table_list.append(
                         {"table": list(table.values())[0], "schema": row_list})
                 except Exception as e:

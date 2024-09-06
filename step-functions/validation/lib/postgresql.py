@@ -13,7 +13,20 @@ express or implied. See the License for the specific language governing
 permissions and limitations under the License.
 """
 
+from contextlib import nullcontext
 import psycopg2
+import traceback
+import os
+import logging
+
+LOG_LEVEL = os.getenv("LOG_LEVEL", "INFO")
+logger = logging.getLogger()
+
+if logger.hasHandlers():
+    logger.setLevel(LOG_LEVEL)
+else:
+    logging.basicConfig(level=LOG_LEVEL)
+
 
 class Connection:
     def __init__(self, hostname, port, username, password, database, schema):
@@ -24,23 +37,23 @@ class Connection:
         self.dbname = database
         self.schema = schema
 
-    def testConnection(self):
-        
+    def get_query_results(self, query):
+        db_connection = None
         try:
-
-            connection = psycopg2.connect(
+            db_connection = psycopg2.connect(
                 host=self.host,
                 port=self.port,
                 user=self.user,
                 password=self.password,
-                dbname=self.dbname)
-            cursor = connection.cursor()
-            cursor.execute("SELECT table_name FROM information_schema.tables WHERE table_schema='{schema}' AND table_type='BASE TABLE'".format(schema=self.schema))
-            cursor.fetchall()
-            cursor.close()
-
-            return True
-
+                dbname=self.dbname,
+            )
+            cursor = db_connection.cursor()
+            cursor.execute(query)
+            response = cursor.fetchall()
+            return response
         except Exception as e:
-            print(e)
-            return False
+            logger.error(traceback.format_exc())
+            raise e
+        finally:
+            if db_connection:
+                db_connection.close()

@@ -63,10 +63,12 @@ export class S3BucketConstruct extends Construct {
 	public userPool: cdk.aws_cognito.UserPool;
 	public webClientUserPool: cdk.aws_cognito.UserPoolClient;
 	public nativeClientUserPool: cdk.aws_cognito.UserPoolClient;
+	public serverClientUserPool: cdk.aws_cognito.UserPoolClient;
 	public userPoolId: string;
 	public identityPoolId: string;
 	public webClientId: string;
 	public nativeClientId: string;
+	public serverClientId: string;
 	public authenticatedRole: cdk.aws_iam.Role;
 	public unauthenticatedRole: cdk.aws_iam.Role;
 	public bucket: s3.Bucket;

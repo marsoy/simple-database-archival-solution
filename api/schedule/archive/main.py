@@ -1,18 +1,3 @@
-""" 
-Copyright 2023 Amazon.com, Inc. and its affiliates. All Rights Reserved.
-
-Licensed under the Amazon Software License (the "License").
-You may not use this file except in compliance with the License.
-A copy of the License is located at
-
-  http://aws.amazon.com/asl/
-
-or in the "license" file accompanying this file. This file is distributed
-on an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either
-express or implied. See the License for the specific language governing
-permissions and limitations under the License.
-"""
-
 import json
 import boto3
 import logging
@@ -22,7 +7,8 @@ import datetime
 import uuid
 import pytz
 
-# region Logging
+from lib import mysql
+from lib import postgresql
 
 LOG_LEVEL = os.getenv("LOG_LEVEL", "INFO")
 logger = logging.getLogger()
@@ -35,10 +21,12 @@ else:
 # endregion
 
 REGION = os.getenv("REGION")
+ARCHIVE_JOB_FUNCTION = os.getenv("ARCHIVE_JOB_FUNCTION")
 
 ssm = boto3.client("ssm")
 secret_client = boto3.client("secretsmanager", region_name=REGION)
 dynamodb_client = boto3.resource("dynamodb")
+lambda_client = boto3.client("lambda")
 
 
 def mask_sensitive_data(event):
@@ -69,41 +57,69 @@ def build_response(http_code, body):
 
 def lambda_handler(event, context):
     logger.info(mask_sensitive_data(event))
-
     try:
-
         parameter = ssm.get_parameter(
             Name="/archive/dynamodb-table", WithDecryption=True
         )
         body = json.loads(event["body"]) if "body" in event else json.loads(event)
         archive_name = body["archive_name"]
-
-        hostname = body["hostname"]
-        mode = body["mode"]
-        port = body["port"]
         username = body["username"]
         database = body["database"]
+        hostname = body["hostname"]
+        port = body["port"]
         database_engine = body["database_engine"]
         archival_start_date = body["archival_start_date"]
         archival_end_date = body["archival_end_date"]
-        table_details = []
+        req_table_details = body["table_details"]
+        compression = body["compression"]
+        partition_keys = body["partition_keys"]
+        glue_worker_details = body["glue_worker_details"]
 
+        table_details = []
         try:
             secret_value = secret_client.get_secret_value(
                 SecretId=f"{database}-{username}"
             )
             secret_arn = secret_value["ARN"]
+            password = secret_value["SecretString"]
         except Exception as e:
             print(
                 f"Fetching secret for database: {database} user: {username} failed with exception: {str(e)}"
             )
             return build_response(500, "Server Error")
-        
-        for table in body["tables"]:
-            table["count_validation"] = {"row_key": None}
-            table["string_validation"] = {"row_key": None}
-            table["number_validation"] = {"row_key": None}
-            table_details.append(table)
+
+        if database_engine == "mysql":
+            connection = mysql.Connection(hostname, port, username, password, database)
+            tables = connection.get_schema_by_tables(
+                table_names=req_table_details.keys()
+            )
+
+        elif database_engine == "postgresql":
+            schema = "public"
+            connection = postgresql.Connection(
+                hostname, port, username, password, database, schema
+            )
+            tables = connection.get_schema_by_tables(
+                table_names=req_table_details.keys()
+            )
+
+        for tab in tables:
+            table_detail = req_table_details[tab["table"]]
+            partition_column = table_detail.get("partition_column")
+            number_validation_row_key = table_detail.get(
+                "number_validation_row_key", None
+            )
+            string_validation_row_key = table_detail.get(
+                "string_validation_row_key", None
+            )
+            tab["count_validation"] = {"row_key": None}
+            tab["string_validation"] = {"row_key": string_validation_row_key}
+            tab["number_validation"] = {"row_key": number_validation_row_key}
+            tab["partition_column"] = partition_column
+            if table_detail.get("use_related"):
+                tab["use_related"] = table_detail.get("use_related")
+                tab["related_table_details"] = table_detail.get("related_table_details")
+            table_details.append(tab)
 
         archive_id = str(uuid.uuid4())
         table = dynamodb_client.Table(parameter["Parameter"]["Value"])
@@ -114,7 +130,7 @@ def lambda_handler(event, context):
                 "id": archive_id,
                 "database_engine": database_engine,
                 "archive_name": archive_name,
-                "mode": mode,
+                "mode": "Read",
                 "hostname": hostname,
                 "port": port,
                 "username": username,
@@ -129,7 +145,12 @@ def lambda_handler(event, context):
                 "job_status": "",
                 "jobs": {},
                 "configuration": {
-                    "glue": {"glue_worker": "Standard", "glue_capacity": 2}
+                    "glue": {
+                        "glue_worker": glue_worker_details["glue_worker"],
+                        "glue_capacity": glue_worker_details["glue_capacity"],
+                    },
+                    "compression": compression,
+                    "partition_keys": partition_keys,
                 },
                 "counters": {
                     "validation": {
@@ -144,9 +165,27 @@ def lambda_handler(event, context):
             }
         )
 
-        response = {"text": "Example response from authenticated api"}
-        return build_response(200, json.dumps(response))
-    except Exception as ex:
+        payload = {
+            "archive_id": archive_id,
+            "worker_capacity": glue_worker_details["glue_capacity"],
+            "worker_type": glue_worker_details["glue_worker"],
+            "archive_schedule": {
+                "run_now": True,
+                "date": "",
+                "time": "",
+            },
+        }
+
+        print(
+            f"Invoking lambda funciton: {ARCHIVE_JOB_FUNCTION} with payload: {payload}"
+        )
+        lambda_client.invoke(
+            FunctionName=ARCHIVE_JOB_FUNCTION,
+            InvocationType="Event",
+            Payload=json.dumps(payload),
+        )
+
+    except Exception as e:
         logger.error(traceback.format_exc())
         return build_response(500, "Server Error")
 

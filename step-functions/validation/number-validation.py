@@ -17,33 +17,51 @@ import boto3
 import os
 
 REGION = os.getenv("REGION")
-ssm = boto3.client('ssm')
-dynamodb = boto3.resource('dynamodb', region_name=REGION)
+ssm = boto3.client("ssm")
+dynamodb = boto3.resource("dynamodb", region_name=REGION)
 
 
-def number_validation(ARCHIVE_ID, DATABASE_NAME, TABLE_NAME, TABLE_INDEX, ROW_KEY):
-    parameter = ssm.get_parameter(
-        Name='/archive/dynamodb-table', WithDecryption=True)
+def number_validation(
+    ARCHIVE_ID, DATABASE_NAME, TABLE_NAME, TABLE_INDEX, ROW_KEY, sub_query
+):
+    parameter = ssm.get_parameter(Name="/archive/dynamodb-table", WithDecryption=True)
     query_parameter = ssm.get_parameter(
-        Name='/archive/query-lookup-dynamodb-table', WithDecryption=True)
+        Name="/archive/query-lookup-dynamodb-table", WithDecryption=True
+    )
     athena_bucket_parameter = ssm.get_parameter(
-        Name='/athena/s3-athena-temp-bucket', WithDecryption=True)
+        Name="/athena/s3-athena-temp-bucket", WithDecryption=True
+    )
 
-    table = dynamodb.Table(parameter['Parameter']['Value'])
-    query_table = dynamodb.Table(query_parameter['Parameter']['Value'])
+    table = dynamodb.Table(parameter["Parameter"]["Value"])
+    query_table = dynamodb.Table(query_parameter["Parameter"]["Value"])
 
-    athena_bucket_value = athena_bucket_parameter['Parameter']['Value']
+    athena_bucket_value = athena_bucket_parameter["Parameter"]["Value"]
 
     # START Number Validation
     try:
         CLIENT = boto3.client("athena")
-        query = "SELECT SUM(\"" + ROW_KEY + "\") from \"" + ARCHIVE_ID + "-" + DATABASE_NAME + \
-                "-database\".\"" + ARCHIVE_ID + "-" + \
-                DATABASE_NAME + "-" + TABLE_NAME + "-table\""
+        query = (
+            'SELECT SUM("'
+            + ROW_KEY
+            + '") AS NUMBERCOUNT from "'
+            + DATABASE_NAME
+            + '-database"."'
+            + DATABASE_NAME
+            + "-"
+            + TABLE_NAME
+            + '-table"'
+        )
+
+        if sub_query:
+            query += sub_query
 
         response = CLIENT.start_query_execution(
             QueryString=query,
-            ResultConfiguration={"OutputLocation": f's3://{athena_bucket_value}/queries/'}
+            QueryExecutionContext={"Database": DATABASE_NAME},
+            ResultConfiguration={
+                "OutputLocation": f"s3://{athena_bucket_value}/queries/"
+            },
+            WorkGroup="sdas",
         )
 
         # Create lookup for queries from QueryExecutionId to Archive ID
@@ -53,21 +71,23 @@ def number_validation(ARCHIVE_ID, DATABASE_NAME, TABLE_NAME, TABLE_INDEX, ROW_KE
                 "archive_id": ARCHIVE_ID,
                 "table_name": TABLE_NAME,
                 "validation_type": "number_validation",
-                "query": query
-            })
+                "query": query,
+                "row_key": ROW_KEY,
+            }
+        )
 
         # Add validation to archive record
         table.update_item(
-            Key={'id': ARCHIVE_ID},
-            UpdateExpression=f'set table_details[{TABLE_INDEX}].number_validation = :newJob',
+            Key={"id": ARCHIVE_ID},
+            UpdateExpression=f"set table_details[{TABLE_INDEX}].number_validation.archived = :newJob",
             ExpressionAttributeValues={
-                ':newJob': {
+                ":newJob": {
                     "query_execution_id": response["QueryExecutionId"],
                     "state": "RUNNING",
                     "query": query,
-                    "results": []
+                    "results": [],
                 }
-            }
+            },
         )
 
         return response
@@ -78,23 +98,32 @@ def number_validation(ARCHIVE_ID, DATABASE_NAME, TABLE_NAME, TABLE_INDEX, ROW_KE
 
 
 def lambda_handler(event, context):
-    dynamodb = boto3.resource('dynamodb', region_name=REGION)
-    ssm = boto3.client('ssm')
+    dynamodb = boto3.resource("dynamodb", region_name=REGION)
+    ssm = boto3.client("ssm")
 
     TABLE_NAME = event["table"]
     DATABASE_NAME = event["database"]
     ARCHIVE_ID = event["archive_id"]
     ROW_KEY = event["key"]
 
-    parameter = ssm.get_parameter(
-        Name='/archive/dynamodb-table', WithDecryption=True)
+    parameter = ssm.get_parameter(Name="/archive/dynamodb-table", WithDecryption=True)
 
-    table = dynamodb.Table(parameter['Parameter']['Value'])
+    table = dynamodb.Table(parameter["Parameter"]["Value"])
     dynamodb_response = table.get_item(Key={"id": ARCHIVE_ID})
 
-    # Count Validation
+    ARCHIVAL_START_DATE = dynamodb_response["Item"]["archival_start_date"]
+    ARCHIVAL_END_DATE = dynamodb_response["Item"]["archival_end_date"]
+    sub_query = None
+    if ARCHIVAL_START_DATE and ARCHIVAL_END_DATE:
+        start_year, start_month, start_day = ARCHIVAL_START_DATE.split("-")
+        end_year, end_month, end_day = ARCHIVAL_END_DATE.split("-")
+        sub_query = f" WHERE year >= {start_year} AND month >= {start_month} AND year <= {end_year} AND month <= {end_month}"
+
+    # Number Validation
     for index, item in enumerate(dynamodb_response["Item"]["table_details"]):
         if item["table"] == TABLE_NAME:
-            number_validation(ARCHIVE_ID, DATABASE_NAME, TABLE_NAME, index, ROW_KEY)
+            number_validation(
+                ARCHIVE_ID, DATABASE_NAME, TABLE_NAME, index, ROW_KEY, sub_query
+            )
 
     return event

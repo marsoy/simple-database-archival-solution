@@ -92,14 +92,6 @@ export function TopBarNavigation() {
 				{
 					type: 'button',
 					variant: 'primary',
-					href: '/add-archive',
-					iconName: 'add-plus',
-					text: '   Add Archive',
-					title: '   Add Archive',
-				},
-				{
-					type: 'button',
-					variant: 'primary',
 					onClick: () => setDarkLightTheme(),
 					iconSvg: Mode.Dark ? (
 						<svg

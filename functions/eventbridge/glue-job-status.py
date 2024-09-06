@@ -22,13 +22,22 @@ REGION = os.getenv("REGION")
 ARCHIVE_TABLE = os.environ["ARCHIVE_TABLE"]
 VALIDATION_STATE_MACHINE = os.environ["VALIDATION_STATE_MACHINE"]
 
-dynamodb_client = boto3.resource('dynamodb', region_name=REGION)
-glue_client = boto3.client('glue', region_name=REGION)
-step_functions_client = boto3.client('stepfunctions')
+dynamodb_client = boto3.resource("dynamodb", region_name=REGION)
+glue_client = boto3.client("glue", region_name=REGION)
+step_functions_client = boto3.client("stepfunctions")
 
 
-def update_job_state(archive_id, job_run_id, job_name, job_message, job_state, job_timestamp, table_name, started_on,
-                     completed_on):
+def update_job_state(
+    archive_id,
+    job_run_id,
+    job_name,
+    job_message,
+    job_state,
+    job_timestamp,
+    table_name,
+    started_on,
+    completed_on,
+):
     """
     Updates the state of a job run in a DynamoDB table.
 
@@ -55,13 +64,9 @@ def update_job_state(archive_id, job_run_id, job_name, job_message, job_state, j
 
     table = dynamodb_client.Table(table_name)
     result = table.update_item(
-        Key={
-            "id": archive_id
-        },
+        Key={"id": archive_id},
         UpdateExpression="SET jobs.#job_run_id = :job_state",
-        ExpressionAttributeNames={
-            "#job_run_id": job_run_id
-        },
+        ExpressionAttributeNames={"#job_run_id": job_run_id},
         ExpressionAttributeValues={
             ":job_state": {
                 "job_name": job_name,
@@ -96,7 +101,7 @@ def lambda_handler(event, context):
     :rtype: dict
     """
 
-    if ("jobName" in event["detail"]):
+    if "jobName" in event["detail"]:
         x = event["detail"]["jobName"].split("-")
         archive_id = x[0] + "-" + x[1] + "-" + x[2] + "-" + x[3] + "-" + x[4]
 
@@ -106,7 +111,7 @@ def lambda_handler(event, context):
         response = glue_client.get_job_run(
             JobName=event["detail"]["jobName"],
             RunId=event["detail"]["jobRunId"],
-            PredecessorsIncluded=False
+            PredecessorsIncluded=False,
         )
 
         # Set Job State
@@ -119,55 +124,58 @@ def lambda_handler(event, context):
             event["time"],
             ARCHIVE_TABLE,
             response["JobRun"]["StartedOn"],
-            response["JobRun"]["CompletedOn"]
+            response["JobRun"]["CompletedOn"],
         )
 
-        if (event["detail"]["state"] == 'FAILED'):
+        if event["detail"]["state"] == "FAILED":
             table.update_item(
-                Key={'id': archive_id},
+                Key={"id": archive_id},
                 UpdateExpression="SET job_status= :s",
-                ExpressionAttributeValues={':s': 'Failed'},
-                ReturnValues="UPDATED_NEW"
+                ExpressionAttributeValues={":s": "Failed"},
+                ReturnValues="UPDATED_NEW",
             )
             table.update_item(
-                Key={'id': archive_id},
+                Key={"id": archive_id},
                 UpdateExpression="SET archive_status= :s",
-                ExpressionAttributeValues={':s': 'Failed'},
-                ReturnValues="UPDATED_NEW"
+                ExpressionAttributeValues={":s": "Failed"},
+                ReturnValues="UPDATED_NEW",
             )
 
-        if (event["detail"]["state"] == 'SUCCEEDED'):
+        if event["detail"]["state"] == "SUCCEEDED":
 
             if dynamodb_response["Item"]["job_status"] != "Failed":
                 table.update_item(
-                    Key={'id': archive_id},
+                    Key={"id": archive_id},
                     UpdateExpression="SET job_status= :s",
-                    ExpressionAttributeValues={':s': 'Succeeded'},
-                    ReturnValues="UPDATED_NEW"
+                    ExpressionAttributeValues={":s": "Succeeded"},
+                    ReturnValues="UPDATED_NEW",
                 )
 
+            if dynamodb_response["Item"]["archive_status"] != "Failed":
                 table.update_item(
-                    Key={'id': archive_id},
+                    Key={"id": archive_id},
                     UpdateExpression="SET archive_status= :s",
-                    ExpressionAttributeValues={':s': 'Validating'},
-                    ReturnValues="UPDATED_NEW"
+                    ExpressionAttributeValues={":s": "Validating"},
+                    ReturnValues="UPDATED_NEW",
                 )
 
-            return_table = {
-                "table": {
-                    "schema": []
-                }
-            }
+            return_table = {"table": {"schema": []}}
 
             dynamodb_updated_response = table.get_item(Key={"id": archive_id})
             for table in dynamodb_updated_response["Item"]["table_details"]:
-                if (table["table"] == x[6]):
+                if table["table"] == x[6]:
                     return_table["table"]["archive_id"] = archive_id
                     return_table["table"]["schema"] = table["schema"]
                     return_table["table"]["table"] = table["table"]
-                    return_table["table"]["database"] = dynamodb_updated_response["Item"]["database"]
-                    return_table["table"]["database_engine"] = dynamodb_updated_response["Item"]["database_engine"]
-                    return_table["table"]["oracle_owner"] = dynamodb_updated_response["Item"]["oracle_owner"]
+                    return_table["table"]["database"] = dynamodb_updated_response[
+                        "Item"
+                    ]["database"]
+                    return_table["table"]["database_engine"] = (
+                        dynamodb_updated_response["Item"]["database_engine"]
+                    )
+                    return_table["table"]["oracle_owner"] = dynamodb_updated_response[
+                        "Item"
+                    ]["oracle_owner"]
 
             step_functions_client.start_execution(
                 stateMachineArn=VALIDATION_STATE_MACHINE,

@@ -36,9 +36,10 @@ else:
 
 # endregion
 
-ssm = boto3.client('ssm')
-client = boto3.client('stepfunctions')
-dynamodb = boto3.resource('dynamodb', region_name=REGION)
+ssm = boto3.client("ssm")
+client = boto3.client("stepfunctions")
+dynamodb = boto3.resource("dynamodb", region_name=REGION)
+
 
 def mask_sensitive_data(event):
     # remove sensitive data from request object before logging
@@ -70,52 +71,54 @@ def lambda_handler(event, context):
     logger.info(mask_sensitive_data(event))
 
     try:
-
-        body = json.loads(
-            event["body"]) if "body" in event else json.loads(event)
+        if "body" in event:
+            body = json.loads(event["body"])
+        else:
+            body = event if isinstance(event, dict) else json.loads(event)
+        print(f"job run body: {body}")
         archive_id = body["archive_id"]
         worker_capacity = body["worker_capacity"]
         worker_type = body["worker_type"]
         run_now = body["archive_schedule"]["run_now"]
 
         parameter = ssm.get_parameter(
-            Name='/archive/dynamodb-table', WithDecryption=True)
-        table = dynamodb.Table(parameter['Parameter']['Value'])
+            Name="/archive/dynamodb-table", WithDecryption=True
+        )
+        table = dynamodb.Table(parameter["Parameter"]["Value"])
 
         # Update Worker Capacity based on User Choice
         table.update_item(
-            Key={'id': archive_id},
+            Key={"id": archive_id},
             UpdateExpression="SET configuration.glue.glue_capacity= :s",
-            ExpressionAttributeValues={':s': worker_capacity},
-            ReturnValues="UPDATED_NEW"
+            ExpressionAttributeValues={":s": worker_capacity},
+            ReturnValues="UPDATED_NEW",
         )
 
         # Update Worker Capacity based on User Choice
         table.update_item(
-            Key={'id': archive_id},
+            Key={"id": archive_id},
             UpdateExpression="SET configuration.glue.glue_worker= :s",
-            ExpressionAttributeValues={':s': worker_type},
-            ReturnValues="UPDATED_NEW"
+            ExpressionAttributeValues={":s": worker_type},
+            ReturnValues="UPDATED_NEW",
         )
 
         parameter = ssm.get_parameter(
-            Name='/job/step-functions-state-machine', WithDecryption=True)
+            Name="/job/step-functions-state-machine", WithDecryption=True
+        )
 
-        input_value = {
-            "archive_id": archive_id
-        }
+        input_value = {"archive_id": archive_id}
 
         if run_now:
             response = client.start_execution(
-                stateMachineArn=parameter['Parameter']['Value'],
+                stateMachineArn=parameter["Parameter"]["Value"],
                 name=str(uuid.uuid4()),
                 input=json.dumps(input_value),
             )
             table.update_item(
-                Key={'id': archive_id},
+                Key={"id": archive_id},
                 UpdateExpression="SET archive_status= :s",
-                ExpressionAttributeValues={':s': "Archiving"},
-                ReturnValues="UPDATED_NEW"
+                ExpressionAttributeValues={":s": "Archiving"},
+                ReturnValues="UPDATED_NEW",
             )
         else:
             print("ADD SCHEDULER")

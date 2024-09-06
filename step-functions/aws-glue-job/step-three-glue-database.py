@@ -17,40 +17,37 @@ import boto3
 import os
 
 REGION = os.getenv("REGION")
-client = boto3.client('glue', region_name=REGION)
-dynamodb = boto3.resource('dynamodb', region_name=REGION)
-ssm = boto3.client('ssm')
+client = boto3.client("glue", region_name=REGION)
+dynamodb = boto3.resource("dynamodb", region_name=REGION)
+ssm = boto3.client("ssm")
 
 
 def lambda_handler(event, context):
 
     # Get SSM Parameter for DynamoDB Table name
-    parameter = ssm.get_parameter(
-        Name='/archive/dynamodb-table', WithDecryption=True)
+    parameter = ssm.get_parameter(Name="/archive/dynamodb-table", WithDecryption=True)
 
-    table = dynamodb.Table(parameter['Parameter']['Value'])
+    table = dynamodb.Table(parameter["Parameter"]["Value"])
 
     # Check if an AWS Glue database exists. If it does not
     # exist, create a database.
     try:
-        response = client.get_database(
-            Name=f'{event["Item"]["id"]}-{event["Item"]["database"]}-database'
-        )
+        response = client.get_database(Name=f'{event["Item"]["database"]}-database')
         print(response)
     except:
         try:
             client.create_database(
                 DatabaseInput={
-                    'Name': f'{event["Item"]["id"]}-{event["Item"]["database"]}-database',
-                    'Description': f'Database for archive ID: {event["Item"]["id"]}',
+                    "Name": f'{event["Item"]["database"]}-database',
+                    "Description": f'Database for archive ID: {event["Item"]["id"]}',
                 }
             )
         except:
             table.update_item(
-                Key={'id': event["Item"]["id"]},
+                Key={"id": event["Item"]["id"]},
                 UpdateExpression="SET archive_status= :s",
-                ExpressionAttributeValues={':s': 'Failed'},
-                ReturnValues="UPDATED_NEW"
+                ExpressionAttributeValues={":s": "Failed"},
+                ReturnValues="UPDATED_NEW",
             )
             raise
 

@@ -22,6 +22,7 @@ import traceback
 from decimal import Decimal
 
 # region Logging
+REGION = os.getenv("REGION")
 LOG_LEVEL = os.getenv("LOG_LEVEL", "INFO")
 logger = logging.getLogger()
 
@@ -33,7 +34,7 @@ else:
     logging.basicConfig(level=LOG_LEVEL)
 # endregion
 
-client = boto3.client('athena')
+client = boto3.client('athena', region_name=REGION)
 ssm = boto3.client('ssm')
 
 def mask_sensitive_data(event):

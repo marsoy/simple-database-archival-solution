@@ -49,7 +49,19 @@ def directJDBCSource(
     )
 
 
-args = getResolvedOptions(sys.argv, ["JOB_NAME", "TABLE", "BUCKET", "DATABASE", "ARCHIVE_ID", "MAPPINGS", "CONNECTION", "MSSQL_SCHEMA"])
+args = getResolvedOptions(
+    sys.argv,
+    [
+        "JOB_NAME",
+        "TABLE",
+        "BUCKET",
+        "DATABASE",
+        "ARCHIVE_ID",
+        "MAPPINGS",
+        "CONNECTION",
+        "MSSQL_SCHEMA",
+    ],
+)
 sc = SparkContext()
 glueContext = GlueContext(sc)
 spark = glueContext.spark_session
@@ -82,7 +94,15 @@ S3bucket_node3 = glueContext.write_dynamic_frame.from_options(
     connection_type="s3",
     format="glueparquet",
     connection_options={
-        "path": "s3://" + args["BUCKET"] + "/" + args["ARCHIVE_ID"] + "/" + args["DATABASE"] + "/" + args["TABLE"] + "/",
+        "path": "s3://"
+        + args["BUCKET"]
+        + "/"
+        + args["ARCHIVE_ID"]
+        + "/"
+        + args["DATABASE"]
+        + "/"
+        + args["TABLE"]
+        + "/",
         "partitionKeys": [],
     },
     format_options={"compression": "uncompressed"},

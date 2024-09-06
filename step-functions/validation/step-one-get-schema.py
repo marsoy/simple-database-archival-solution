@@ -17,8 +17,8 @@ import boto3
 import os
 
 REGION = os.getenv("REGION")
-dynamodb = boto3.resource('dynamodb', region_name=REGION)
-ssm = boto3.client('ssm')
+dynamodb = boto3.resource("dynamodb", region_name=REGION)
+ssm = boto3.client("ssm")
 
 
 def update_validation_count(archive_id):
@@ -35,16 +35,15 @@ def update_validation_count(archive_id):
     botocore.exceptions.ClientError: If there is an error with the AWS client.
     """
 
-    parameter = ssm.get_parameter(
-        Name='/archive/dynamodb-table', WithDecryption=True)
-    table = dynamodb.Table(parameter['Parameter']['Value'])
+    parameter = ssm.get_parameter(Name="/archive/dynamodb-table", WithDecryption=True)
+    table = dynamodb.Table(parameter["Parameter"]["Value"])
 
     # Instead of fetching and incrementing in the code, use ADD to increment atomically
     table.update_item(
-        Key={'id': archive_id},
+        Key={"id": archive_id},
         UpdateExpression="ADD counters.validation.validation_count :inc",
-        ExpressionAttributeValues={':inc': 1},
-        ReturnValues="UPDATED_NEW"
+        ExpressionAttributeValues={":inc": 1},
+        ReturnValues="UPDATED_NEW",
     )
 
 
@@ -68,51 +67,89 @@ def lambda_handler(event, context):
     string_counter = 0
     number_counter = 0
 
-    # Count Validation
-    update_validation_count(event["table"]["archive_id"])
-    return_event.append({
+    parameter = ssm.get_parameter(Name="/archive/dynamodb-table", WithDecryption=True)
+    table = dynamodb.Table(parameter["Parameter"]["Value"])
+
+    validation_default_data = {
         "table": event["table"]["table"],
         "archive_id": event["table"]["archive_id"],
         "database": event["table"]["database"],
         "database_engine": event["table"]["database_engine"],
         "oracle_owner": event["table"]["oracle_owner"],
-        "validation_type": "count_validation"
-    })
+    }
+
+    archive_id = event["table"]["archive_id"]
+    dynamodb_response = table.get_item(Key={"id": archive_id})
+
+    table_name = event["table"]["table"]
+    table_detail = None
+    for index, item in enumerate(dynamodb_response["Item"]["table_details"]):
+        if item["table"] == table_name:
+            table_detail = item
+
+    # Count Validation
+    update_validation_count(archive_id)
+    return_event.append(
+        {
+            **validation_default_data,
+            "validation_type": "count_validation",
+        }
+    )
 
     # String Validation
-    for schema in event["table"]["schema"][::-1]:
-        if schema["value"] == "string":
-            update_validation_count(event["table"]["archive_id"])
-            return_event.append({
-                "table": event["table"]["table"],
-                "archive_id": event["table"]["archive_id"],
-                "database": event["table"]["database"],
-                "database_engine": event["table"]["database_engine"],
-                "oracle_owner": event["table"]["oracle_owner"],
-                "key": schema["key"],
-                "value": schema["value"],
-                "validation_type": "string_validation"
-            })
-            string_counter += 1
-        if string_counter == 1:
-            break
+    string_validation = table_detail["string_validation"]
+    string_validation_row_key = string_validation.get("row_key", None)
+    if string_validation_row_key:
+        update_validation_count(event["table"]["archive_id"])
+        return_event.append(
+            {
+                **validation_default_data,
+                "key": string_validation_row_key,
+                "validation_type": "string_validation",
+            }
+        )
+    else:
+        for schema in event["table"]["schema"][::-1]:
+            if schema["value"] == "string":
+                update_validation_count(event["table"]["archive_id"])
+                return_event.append(
+                    {
+                        **validation_default_data,
+                        "key": schema["key"],
+                        "value": schema["value"],
+                        "validation_type": "string_validation",
+                    }
+                )
+                string_counter += 1
+            if string_counter == 1:
+                break
 
     # Number Validation
-    for schema in event["table"]["schema"][::-1]:
-        if schema["value"] in ["decimal", "number", "int"]:
-            update_validation_count(event["table"]["archive_id"])
-            return_event.append({
-                "table": event["table"]["table"],
-                "archive_id": event["table"]["archive_id"],
-                "database": event["table"]["database"],
-                "database_engine": event["table"]["database_engine"],
-                "oracle_owner": event["table"]["oracle_owner"],
-                "key": schema["key"],
-                "value": schema["value"],
-                "validation_type": "number_validation"
-            })
-            number_counter += 1
-        if number_counter == 1:
-            break
+    number_validation = table_detail["number_validation"]
+    number_validation_row_key = number_validation.get("row_key", None)
+    if number_validation_row_key:
+        update_validation_count(event["table"]["archive_id"])
+        return_event.append(
+            {
+                **validation_default_data,
+                "key": number_validation_row_key,
+                "validation_type": "number_validation",
+            }
+        )
+    else:
+        for schema in event["table"]["schema"][::-1]:
+            if schema["value"] in ["decimal", "number", "int"]:
+                update_validation_count(event["table"]["archive_id"])
+                return_event.append(
+                    {
+                        **validation_default_data,
+                        "key": schema["key"],
+                        "value": schema["value"],
+                        "validation_type": "number_validation",
+                    }
+                )
+                number_counter += 1
+            if number_counter == 1:
+                break
 
     return {"Payload": return_event}

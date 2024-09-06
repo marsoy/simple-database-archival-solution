@@ -24,6 +24,7 @@ import {
 	Spinner,
 	Button,
 	StatusIndicator,
+	DatePicker,
 } from '@cloudscape-design/components';
 import { API } from 'aws-amplify';
 
@@ -86,9 +87,11 @@ export default function DatabaseSettingsPanel({
 				hostname: archivePanelData.databaseHostname || '',
 				port: archivePanelData.databasePort || '',
 				username: archivePanelData.databaseUsername || '',
-				password: archivePanelData.databasePassword || '',
 				database: archivePanelData.databaseName || '',
 				archive_name: archivePanelData.archiveName || '',
+				schema: archivePanelData.schema || '',
+				archival_start_date: archivePanelData.archivalStartDate || '',
+				archival_end_date: archivePanelData.archivalEndDate || '',
 				mode: archivePanelData.databaseMode || '',
 			},
 		};
@@ -115,7 +118,6 @@ export default function DatabaseSettingsPanel({
 		archivePanelData.databaseName !== undefined &&
 		archivePanelData.databaseHostname !== undefined &&
 		archivePanelData.databasePort !== undefined &&
-		archivePanelData.databasePassword !== undefined &&
 		archivePanelData.databaseUsername !== undefined &&
 		archivePanelData.databaseMode !== undefined &&
 		databaseEngine !== undefined;
@@ -186,8 +188,7 @@ export default function DatabaseSettingsPanel({
 						<FormField
 							stretch={true}
 							description="Enter the username for the connection."
-							className="date-time-container"
-							errorText={getErrorText('Invalid time format.')}
+							errorText={getErrorText('Invalid format.')}
 							i18nStrings={{ errorIconAriaLabel: 'Error' }}
 						>
 							<Input
@@ -196,23 +197,6 @@ export default function DatabaseSettingsPanel({
 								placeholder=""
 								onChange={({ detail: { value } }) =>
 									onChange('databaseUsername', value)
-								}
-							/>
-						</FormField>
-						<FormField
-							stretch={true}
-							description="Enter the password for the connection."
-							className="date-time-container"
-							errorText={getErrorText('Invalid time format.')}
-							i18nStrings={{ errorIconAriaLabel: 'Error' }}
-						>
-							<Input
-								value={archivePanelData.databasePassword}
-								ariaRequired={true}
-								placeholder=""
-								type="password"
-								onChange={({ detail: { value } }) =>
-									onChange('databasePassword', value)
 								}
 							/>
 						</FormField>
@@ -249,6 +233,28 @@ export default function DatabaseSettingsPanel({
 					<></>
 				)}
 
+				{databaseEngine === 'postgresql' ? (
+					<FormField
+						label="Schema Name"
+						description="Enter a the name of the schema. (Default: public)"
+						errorText={getErrorText(
+							'You must specify a root object.'
+						)}
+						i18nStrings={{ errorIconAriaLabel: 'Error' }}
+					>
+						<Input
+							value={archivePanelData.schema}
+							ariaRequired={false}
+							placeholder="public"
+							onChange={({ detail: { value } }) =>
+								onChange('schema', value)
+							}
+						/>
+					</FormField>
+				) : (
+					<></>
+				)}
+
 				<FormField
 					stretch={true}
 					label={
@@ -259,9 +265,7 @@ export default function DatabaseSettingsPanel({
 						<FormField
 							stretch={true}
 							description="Enter the port number of the database."
-							className="date-time-container"
-							// constraintText={'Use YYYY/MM/DD format.'}
-							errorText={getErrorText('Invalid time format.')}
+							errorText={getErrorText('Invalid number format.')}
 							i18nStrings={{ errorIconAriaLabel: 'Error' }}
 						>
 							<Input
@@ -283,6 +287,52 @@ export default function DatabaseSettingsPanel({
 								}
 								onChange={({ detail: { value } }) =>
 									onChange('databasePort', value)
+								}
+							/>
+						</FormField>
+					</SpaceBetween>
+				</FormField>
+
+				<FormField
+					stretch={true}
+					label={
+						<span id="certificate-expiry-label">
+							Archival Duration
+						</span>
+					}
+				>
+					<SpaceBetween size="s" direction="horizontal">
+						<FormField
+							stretch={true}
+							description="Enter the start date"
+							className="date-time-container"
+							errorText={getErrorText('Invalid date format.')}
+							i18nStrings={{ errorIconAriaLabel: 'Error' }}
+						>
+							<DatePicker
+								value={archivePanelData.archivalStartDate}
+								ariaRequired={false}
+								placeholder=""
+								type="date"
+								onChange={({ detail: { value } }) =>
+									onChange('archivalStartDate', value)
+								}
+							/>
+						</FormField>
+						<FormField
+							stretch={true}
+							description="Enter the end date"
+							className="date-time-container"
+							errorText={getErrorText('Invalid date format.')}
+							i18nStrings={{ errorIconAriaLabel: 'Error' }}
+						>
+							<DatePicker
+								value={archivePanelData.archivalEndDate}
+								ariaRequired={false}
+								placeholder=""
+								type="date"
+								onChange={({ detail: { value } }) =>
+									onChange('archivalEndDate', value)
 								}
 							/>
 						</FormField>
@@ -313,7 +363,7 @@ export default function DatabaseSettingsPanel({
 				{databaseTestExecuted ? (
 					databaseConnected ? (
 						<StatusIndicator type="success">
-							Connection Successfully
+							Connection Successful
 						</StatusIndicator>
 					) : (
 						<StatusIndicator type="error">

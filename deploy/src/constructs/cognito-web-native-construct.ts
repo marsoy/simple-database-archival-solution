@@ -28,10 +28,12 @@ export class CognitoWebNativeConstruct extends Construct {
 	public userPool: cdk.aws_cognito.UserPool;
 	public webClientUserPool: cdk.aws_cognito.UserPoolClient;
 	public nativeClientUserPool: cdk.aws_cognito.UserPoolClient;
+	public serverClientUserPool: cdk.aws_cognito.UserPoolClient;
 	public userPoolId: string;
 	public identityPoolId: string;
 	public webClientId: string;
 	public nativeClientId: string;
+	public serverClientId: string;
 	public authenticatedRole: cdk.aws_iam.Role;
 	public unauthenticatedRole: cdk.aws_iam.Role;
 
@@ -96,6 +98,16 @@ export class CognitoWebNativeConstruct extends Construct {
 			}
 		);
 
+		const userPoolServerClient = new cdk.aws_cognito.UserPoolClient(
+			this,
+			'userPoolServerClient',
+			{
+				generateSecret: true,
+				userPool: userPool,
+				userPoolClientName: 'ServerClient',
+			}
+		);
+
 		const identityPool = new cdk.aws_cognito.CfnIdentityPool(
 			this,
 			'IdentityPool',
@@ -108,6 +120,10 @@ export class CognitoWebNativeConstruct extends Construct {
 					},
 					{
 						clientId: userPoolNativeClient.userPoolClientId,
+						providerName: userPool.userPoolProviderName,
+					},
+					{
+						clientId: userPoolServerClient.userPoolClientId,
 						providerName: userPool.userPoolProviderName,
 					},
 				],
@@ -181,6 +197,9 @@ export class CognitoWebNativeConstruct extends Construct {
 		new cdk.CfnOutput(this, 'NativeClientId', {
 			value: userPoolNativeClient.userPoolClientId,
 		});
+		new cdk.CfnOutput(this, 'ServerClientId', {
+			value: userPoolServerClient.userPoolClientId,
+		});
 
 		// Add SSM Parameters
 		new cdk.aws_ssm.StringParameter(this, 'COGNITO_USER_POOL_ID', {
@@ -199,15 +218,21 @@ export class CognitoWebNativeConstruct extends Construct {
 			stringValue: userPoolNativeClient.userPoolClientId,
 		});
 
+		new cdk.aws_ssm.StringParameter(this, 'COGNITO_SERVER_CLIENT_ID', {
+			stringValue: userPoolServerClient.userPoolClientId,
+		});
+
 		// assign public properties
 		this.userPool = userPool;
 		this.webClientUserPool = userPoolWebClient;
 		this.nativeClientUserPool = userPoolNativeClient;
+		this.serverClientUserPool = userPoolServerClient;
 		this.authenticatedRole = authenticatedRole;
 		this.unauthenticatedRole = unauthenticatedRole;
 		this.userPoolId = userPool.userPoolId;
 		this.identityPoolId = identityPool.ref;
 		this.webClientId = userPoolWebClient.userPoolClientId;
 		this.nativeClientId = userPoolNativeClient.userPoolClientId;
+		this.serverClientId = userPoolServerClient.userPoolClientId;
 	}
 }

@@ -24,12 +24,6 @@ export const navItems = [
 		text: 'Home',
 		href: '/',
 	},
-
-	{
-		type: 'link',
-		text: 'Add Archive',
-		href: '/add-archive',
-	},
 ];
 
 const defaultOnFollowHandler = (ev) => {

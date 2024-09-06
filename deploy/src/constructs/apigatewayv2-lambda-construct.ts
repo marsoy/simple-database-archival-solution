@@ -15,6 +15,7 @@
 
 import * as apigw from '@aws-cdk/aws-apigatewayv2-alpha';
 import * as apigwIntegrations from '@aws-cdk/aws-apigatewayv2-integrations-alpha';
+import * as apigwAuthorizers from '@aws-cdk/aws-apigatewayv2-authorizers-alpha';
 import * as cdk from 'aws-cdk-lib';
 import { Construct } from 'constructs';
 
@@ -35,6 +36,10 @@ export interface ApiGatewayV2LambdaConstructProps extends cdk.StackProps {
 	 * The ApiGatewayV2 HttpApi to attach the lambda
 	 */
 	readonly api: apigw.HttpApi;
+	/**
+	 * The custom lambda authorizer function
+	 */
+	readonly lambdaAuthorizerFn?: cdk.aws_lambda.Function;
 }
 
 const defaultProps: Partial<ApiGatewayV2LambdaConstructProps> = {};
@@ -64,11 +69,32 @@ export class ApiGatewayV2LambdaConstruct extends Construct {
 			{}
 		);
 
-		// add route to the api gateway
-		props.api.addRoutes({
+		const route_config: any = {
 			path: props.routePath,
 			methods: props.methods,
 			integration: lambdaFnIntegration,
-		});
+		};
+
+		if (props.lambdaAuthorizerFn !== undefined) {
+			props.lambdaAuthorizerFn.grantInvoke(
+				new cdk.aws_iam.ServicePrincipal('apigateway.amazonaws.com')
+			);
+
+			const lamndaAuthorizer = new apigwAuthorizers.HttpLambdaAuthorizer(
+				'lamndaAuthorizer',
+				props.lambdaAuthorizerFn,
+				{
+					authorizerName: 'LamndaAuthorizer',
+					resultsCacheTtl: cdk.Duration.minutes(5),
+					responseTypes: [
+						apigwAuthorizers.HttpLambdaResponseType.SIMPLE,
+					],
+				}
+			);
+			route_config.authorizer = lamndaAuthorizer;
+		}
+
+		// add route to the api gateway
+		props.api.addRoutes(route_config);
 	}
 }

@@ -509,6 +509,7 @@ export class AppStack extends cdk.Stack {
                 'athena:StartQueryExecution',
                 'athena:GetQueryResults',
                 'glue:GetTable',
+                'glue:GetPartitions',
             ],
             resources: [
                 `arn:aws:athena:${this.region}:${awsAccountId}:*`,
@@ -522,17 +523,17 @@ export class AppStack extends cdk.Stack {
         });
 
         const glueCatalogPolicy = new iam.PolicyStatement({
-            actions: ['glue:GetTable'],
+            actions: ['glue:GetTable', 'glue:GetPartitions'],
             resources: [`arn:aws:glue:${awsRegion}:${awsAccountId}:catalog`],
         });
 
         const glueDatabasePolicy = new iam.PolicyStatement({
-            actions: ['glue:GetTable'],
+            actions: ['glue:GetTable', 'glue:GetPartitions'],
             resources: [`arn:aws:glue:${awsRegion}:${awsAccountId}:database/*`],
         });
 
         const glueTablePolicy = new iam.PolicyStatement({
-            actions: ['glue:GetTable'],
+            actions: ['glue:GetTable', 'glue:GetPartitions'],
             resources: [`arn:aws:glue:${awsRegion}:${awsAccountId}:table/*`],
         });
 
@@ -567,6 +568,9 @@ export class AppStack extends cdk.Stack {
                 'glue:GetDatabase',
                 'glue:GetTable',
                 'glue:GetJobRun',
+                'glue:UpdateTable',
+                'glue:CreatePartition',
+                'glue:BatchCreatePartition',
             ],
             resources: [`arn:aws:glue:${awsRegion}:${awsAccountId}:*`],
         });
@@ -631,6 +635,11 @@ export class AppStack extends cdk.Stack {
                     ),
                 ],
             }
+        );
+
+        // TODO: Remove this or find alternative for database connection test
+        testConnectionRole.addToPolicy(
+            secretsmanagerGetSecretValue
         );
 
         // Create a security group for the RDS
@@ -704,6 +713,10 @@ export class AppStack extends cdk.Stack {
                 actions: ['dynamodb:GetItem', 'dynamodb:UpdateItem'],
                 resources: [fetchTablesSchemaAsync.tableArn],
             })
+        );
+
+        backgroundGetSourceTablesRole.addToPolicy(
+            secretsmanagerGetSecretValue
         );
 
         const backgroundGetSourceTablesLambda = new lambdaPython.PythonFunction(
@@ -788,6 +801,136 @@ export class AppStack extends cdk.Stack {
         });
         // END: API to get tables from Source Database, calls background function to get tables asynchronous
 
+        const runArchiveJobLambda = new lambdaPython.PythonFunction(
+            this,
+            'runArchiveJobLambda',
+            {
+                runtime: cdk.aws_lambda.Runtime.PYTHON_3_9,
+                handler: 'lambda_handler',
+                index: 'main.py',
+                entry: '../api/job/run',
+                timeout: cdk.Duration.minutes(5),
+                environment: {
+                    REGION: awsRegion
+                },
+            }
+        );
+
+        runArchiveJobLambda.role?.attachInlinePolicy(
+            new iam.Policy(this, 'runArchiveJobLambdaFnPolicy', {
+                statements: [
+                    dynamoDbReadOnlyPolicy,
+                    dynamoDbWritePolicy,
+                    ssmGetParameterPolicy,
+                    stateMachinePolicy,
+                    glueS3BucketPolicy,
+                ],
+            })
+        );
+
+        new ApiGatewayV2LambdaConstruct(this, 'RunArchiveJobRoute', {
+            lambdaFn: runArchiveJobLambda,
+            routePath: '/api/job/run',
+            methods: [apigwv2.HttpMethod.POST],
+            api: api.apiGatewayV2,
+        });
+        
+        const apiScheduleArchiveRole = new iam.Role(
+            this,
+            'apiScheduleArchiveRole',
+            {
+                roleName: 'apiScheduleArchiveRole',
+                assumedBy: new iam.ServicePrincipal('lambda.amazonaws.com'),
+                description: 'IAM Role for schedule archive',
+                managedPolicies: [
+                    iam.ManagedPolicy.fromAwsManagedPolicyName(
+                        'service-role/AWSLambdaVPCAccessExecutionRole'
+                    ),
+                    iam.ManagedPolicy.fromAwsManagedPolicyName(
+                        'service-role/AWSLambdaBasicExecutionRole'
+                    ),
+                ],
+            }
+        );
+
+        apiScheduleArchiveRole.addToPolicy(
+            new iam.PolicyStatement({
+                actions: ['dynamodb:PutItem'],
+                resources: [archiveTable.tableArn],
+            })
+        );
+
+        apiScheduleArchiveRole.addToPolicy(
+            new iam.PolicyStatement({
+                actions: ['lambda:InvokeFunction'],
+                resources: [`arn:aws:lambda:${awsRegion}:${awsAccountId}:*`],
+            })
+        );
+
+        apiScheduleArchiveRole.addToPolicy(
+            ssmGetParameterPolicy
+        );
+
+        apiScheduleArchiveRole.addToPolicy(
+            secretsmanagerGetSecretValue
+        );
+
+        const apiScheduleArchiveLambda = 
+            new lambdaPython.PythonFunction(
+                this,
+                'apiScheduleArchiveLambda',
+                {
+                    role: apiScheduleArchiveRole,
+                    vpc: vpc,
+                    securityGroups: [rdsSecurityGroup],
+                    vpcSubnets: {
+                        subnetType: ec2.SubnetType.PRIVATE_WITH_EGRESS,
+                    },
+                    allowPublicSubnet: true,
+                    runtime: cdk.aws_lambda.Runtime.PYTHON_3_9,
+                    handler: 'lambda_handler',
+                    index: 'main.py',
+                    entry: '../api/schedule/archive',
+                    timeout: cdk.Duration.seconds(30),
+                    environment: {
+                        REGION: awsRegion,
+                        ARCHIVE_JOB_FUNCTION: runArchiveJobLambda.functionArn,
+                    },
+                }
+            );
+            
+        const lambdaAuthorizer =
+            new lambdaPython.PythonFunction(
+                this,
+                'lambdaAuthorizer',
+                {
+                    runtime: cdk.aws_lambda.Runtime.PYTHON_3_9,
+                    handler: 'lambda_handler',
+                    index: 'main.py',
+                    entry: '../auth/lambda/request',
+                    timeout: cdk.Duration.seconds(30),
+                    environment: {
+                        REGION: awsRegion,
+                    },
+                }
+            );
+
+        lambdaAuthorizer.role?.attachInlinePolicy(
+            new iam.Policy(this, 'lambdaAuthorizerFnPolicy', {
+                    statements: [
+                        secretsmanagerGetSecretValue,
+                    ],
+                })
+        );
+
+        new ApiGatewayV2LambdaConstruct(this, 'ApiScheduleArchiveRoute', {
+                lambdaFn: apiScheduleArchiveLambda,
+                routePath: '/api/schedule/archive',
+                methods: [apigwv2.HttpMethod.POST],
+                api: api.apiGatewayV2,
+                lambdaAuthorizerFn: lambdaAuthorizer,
+        });
+
         /*
          * END
          * Test Connection & Get Database Schema.
@@ -846,7 +989,7 @@ export class AppStack extends cdk.Stack {
                 iamInlinePolicy: [
                     dynamoDbWritePolicy,
                     ssmGetParameterPolicy,
-                    secretsmanagerCreateSecret,
+                    secretsmanagerGetSecretValue,
                 ],
             },
             {
@@ -903,27 +1046,6 @@ export class AppStack extends cdk.Stack {
                 ],
             },
             {
-                name: 'RunArchiveJob',
-                runtime: cdk.aws_lambda.Runtime.PYTHON_3_9,
-                handler: 'lambda_handler',
-                index: 'main.py',
-                entry: '../api/job/run',
-                timeout: cdk.Duration.minutes(5),
-                environment: {
-                    REGION: awsRegion,
-                },
-                routePath: '/api/job/run',
-                methods: [apigwv2.HttpMethod.POST],
-                api: api.apiGatewayV2,
-                iamInlinePolicy: [
-                    dynamoDbReadOnlyPolicy,
-                    dynamoDbWritePolicy,
-                    ssmGetParameterPolicy,
-                    stateMachinePolicy,
-                    glueS3BucketPolicy,
-                ],
-            },
-            {
                 name: 'AthenaQuery',
                 runtime: cdk.aws_lambda.Runtime.PYTHON_3_9,
                 handler: 'lambda_handler',
@@ -972,31 +1094,6 @@ export class AppStack extends cdk.Stack {
          * SQS FIFO Queue for Validation
          */
 
-        const validationQueueFn = new lambdaPython.PythonFunction(
-            this,
-            'ValidationQueueFn',
-            {
-                runtime: cdk.aws_lambda.Runtime.PYTHON_3_9,
-                handler: 'lambda_handler',
-                index: 'validation.py',
-                entry: '../functions/sqs',
-                timeout: cdk.Duration.seconds(60),
-                environment: {
-                    REGION: awsRegion,
-                },
-            }
-        );
-
-        validationQueueFn.role?.attachInlinePolicy(
-            new iam.Policy(this, 'ValidationQueueFnPolicy', {
-                statements: [
-                    dynamoDbWritePolicy,
-                    dynamoDbReadOnlyPolicy,
-                    ssmGetParameterPolicy,
-                ],
-            })
-        );
-
         const sqsFifoValidation = new sqs.Queue(this, 'ValidationQueue', {
             encryption: sqs.QueueEncryption.KMS_MANAGED,
             visibilityTimeout: Duration.seconds(60),
@@ -1012,6 +1109,25 @@ export class AppStack extends cdk.Stack {
             allowedPattern: '.*',
         });
 
+        const validationQueueFn = new lambdaPython.PythonFunction(
+            this,
+            'ValidationQueueFn',
+            {
+                runtime: cdk.aws_lambda.Runtime.PYTHON_3_9,
+                handler: 'lambda_handler',
+                index: 'validation.py',
+                entry: '../functions/sqs',
+                timeout: cdk.Duration.seconds(60),
+                environment: {
+                    REGION: awsRegion,
+                },
+            }
+        );
+
+        validationQueueFn.addEventSource(
+            new SqsEventSource(sqsFifoValidation, {})
+        );
+
         const sqsPolicy = new iam.PolicyStatement({
             actions: ['sqs:SendMessage'],
             resources: [
@@ -1019,9 +1135,17 @@ export class AppStack extends cdk.Stack {
             ],
         });
 
-        validationQueueFn.addEventSource(
-            new SqsEventSource(sqsFifoValidation, {})
+        validationQueueFn.role?.attachInlinePolicy(
+            new iam.Policy(this, 'ValidationQueueFnPolicy', {
+                statements: [
+                    dynamoDbWritePolicy,
+                    dynamoDbReadOnlyPolicy,
+                    ssmGetParameterPolicy,
+                    sqsPolicy,
+                ],
+            })
         );
+
 
         /*
          * END
@@ -1419,18 +1543,34 @@ export class AppStack extends cdk.Stack {
         const stepFunctionValidationStepThree = new lambdaPython.PythonFunction(
             this,
             'StepFunctionValidationStepThree',
-            {
+            {   
+                vpc: vpc,
+                securityGroups: [rdsSecurityGroup],
+                vpcSubnets: {
+                    subnetType: ec2.SubnetType.PRIVATE_WITH_EGRESS,
+                },
+                allowPublicSubnet: true,
                 runtime: cdk.aws_lambda.Runtime.PYTHON_3_9,
                 handler: 'lambda_handler',
                 index: 'step-three-output-validation.py',
                 entry: '../step-functions/validation',
                 timeout: cdk.Duration.minutes(5),
-                environment: {},
+                environment: {
+                    REGION: awsRegion
+                },
             }
         );
 
         stepFunctionValidationStepThree.role?.attachInlinePolicy(
-            new iam.Policy(this, 'StepFunctionValidationStepThreePolicy', {})
+            new iam.Policy(this, 'StepFunctionValidationStepThreePolicy', {
+                statements: [
+                    ssmGetParameterPolicy,
+                    dynamoDbWritePolicy,
+                    dynamoDbReadOnlyPolicy,
+                    secretsmanagerGetSecretValue,
+                    sqsPolicy,
+                ],
+            })
         );
 
         const stepFunctionValidationCount = new lambdaPython.PythonFunction(
@@ -1456,6 +1596,9 @@ export class AppStack extends cdk.Stack {
                     awsGluePolicy,
                     dynamoDbWritePolicy,
                     dynamoDbReadOnlyPolicy,
+                    glueCatalogPolicy,
+                    glueDatabasePolicy,
+                    glueTablePolicy,
                 ],
             })
         );
@@ -1504,6 +1647,9 @@ export class AppStack extends cdk.Stack {
                     awsGluePolicy,
                     dynamoDbWritePolicy,
                     dynamoDbReadOnlyPolicy,
+                    glueCatalogPolicy,
+                    glueDatabasePolicy,
+                    glueTablePolicy,
                 ],
             })
         );
@@ -1552,6 +1698,9 @@ export class AppStack extends cdk.Stack {
                     awsGluePolicy,
                     dynamoDbWritePolicy,
                     dynamoDbReadOnlyPolicy,
+                    glueCatalogPolicy,
+                    glueDatabasePolicy,
+                    glueTablePolicy,
                 ],
             })
         );
@@ -1580,7 +1729,7 @@ export class AppStack extends cdk.Stack {
         const retryPolicy = {
             errors: ['ClientError'],
             interval: cdk.Duration.seconds(300),
-            maxAttempts: 9,
+            maxAttempts: 5,
             backoffRate: 2.5
         };
 
@@ -1619,6 +1768,15 @@ export class AppStack extends cdk.Stack {
                         }).addRetry(retryPolicy)
                     )
             )
+        ).next(
+            new cdk.aws_stepfunctions_tasks.LambdaInvoke(
+                this, 
+                'Step Three - Output Validation',
+                {
+                    lambdaFunction: stepFunctionValidationStepThree,
+                    outputPath: '$.Payload',
+                }
+            ).addRetry(retryPolicy)
         );
 
         const validationLogGroup = new cdk.aws_logs.LogGroup(
@@ -1721,7 +1879,6 @@ export class AppStack extends cdk.Stack {
                     awsGluePolicyTest,
                     stateMachinePolicy,
                     athenaPolicy,
-                    sqsPolicy,
                 ],
             })
         );
@@ -1916,7 +2073,7 @@ export class AppStack extends cdk.Stack {
             })
         );
 
-        // [END] api/archive/archive
+        // [END] api/archive/validate
 
         // [START] api/archive/archive
         const archive = new lambdaPython.PythonFunction(this, 'ArchiveFn', {

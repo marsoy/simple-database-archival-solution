@@ -23,11 +23,10 @@ REGION = os.environ["REGION"]
 client = boto3.client(
     "glue",
     region_name=REGION,
-    config=Config(connect_timeout=5, read_timeout=60,
-                  retries={"max_attempts": 20}),
+    config=Config(connect_timeout=5, read_timeout=60, retries={"max_attempts": 20}),
 )
 dynamodb = boto3.resource("dynamodb", region_name=REGION)
-ssm = boto3.client("ssm")
+ssm = boto3.client("ssm", region_name=REGION)
 
 
 def lambda_handler(event, context):
@@ -35,10 +34,8 @@ def lambda_handler(event, context):
     bucketParameter = ssm.get_parameter(
         Name="/job/s3-bucket-table-data", WithDecryption=True
     )
-    parameter = ssm.get_parameter(
-        Name="/archive/dynamodb-table", WithDecryption=True)
-    temp_dir_parameter = ssm.get_parameter(
-        Name="/glue/temp-dir", WithDecryption=True)
+    parameter = ssm.get_parameter(Name="/archive/dynamodb-table", WithDecryption=True)
+    temp_dir_parameter = ssm.get_parameter(Name="/glue/temp-dir", WithDecryption=True)
 
     table = dynamodb.Table(parameter["Parameter"]["Value"])
     temp_dir_parameter_value = temp_dir_parameter["Parameter"]["Value"]
@@ -53,7 +50,14 @@ def lambda_handler(event, context):
                 [schema["key"], schema["value"], schema["key"], schema["value"]]
             )
 
+        table_primary_key_mappings = {}
+        for table_detail in dynamodb_response["Item"]["table_details"]:
+            table_primary_key_mappings.update(
+                {table_detail["table"]: table_detail["primary_key"]}
+            )
+
         if event["database_engine"] == "mysql":
+            configuration = dynamodb_response["Item"]["configuration"]
             response = client.start_job_run(
                 JobName=f'{event["archive_id"]}-{event["database"]}-{event["table"]}',
                 Arguments={
@@ -67,14 +71,31 @@ def lambda_handler(event, context):
                     "--ARCHIVE_ID": event["archive_id"],
                     "--CONNECTION": f'{event["archive_id"]}-{event["database"]}-connection',
                     "--MAPPINGS": json.dumps(mappings),
+                    "--TABLE_PRIMARY_KEY_MAPPINGS": json.dumps(
+                        table_primary_key_mappings
+                    ),
+                    "--ARCHIVE_OPTIONS": json.dumps(
+                        {
+                            "archival_start_date": dynamodb_response["Item"][
+                                "archival_start_date"
+                            ],
+                            "archival_end_date": dynamodb_response["Item"][
+                                "archival_end_date"
+                            ],
+                        }
+                    ),
+                    "--CONFIGURATION_OPTIONS": json.dumps(
+                        {
+                            "glue_capacity": configuration["glue"]["glue_capacity"],
+                            "glue_worker": configuration["glue"]["glue_worker"],
+                            "compression": configuration.get("compression", None),
+                            "partition_keys": configuration.get("partition_keys", None),
+                        }
+                    ),
                 },
                 Timeout=2880,
-                WorkerType=dynamodb_response["Item"]["configuration"]["glue"][
-                    "glue_worker"
-                ],
-                NumberOfWorkers=int(
-                    dynamodb_response["Item"]["configuration"]["glue"]["glue_capacity"]
-                ),
+                WorkerType=configuration["glue"]["glue_worker"],
+                NumberOfWorkers=int(configuration["glue"]["glue_capacity"]),
             )
 
             table.update_item(
@@ -91,6 +112,48 @@ def lambda_handler(event, context):
                     }
                 },
             )
+        elif event["database_engine"] == "postgresql":
+            configuration = dynamodb_response["Item"]["configuration"]
+            response = client.start_job_run(
+                JobName=f'{event["archive_id"]}-{event["database"]}-{event["table"]}',
+                Arguments={
+                    "--job-language": "python",
+                    "--job-bookmark-option": "job-bookmark-disable",
+                    "--TempDir": f"s3://{temp_dir_parameter_value}/temporary/",
+                    "--enable-job-insights": "false",
+                    "--TABLE": event["table"],
+                    "--BUCKET": bucketParameter["Parameter"]["Value"],
+                    "--DATABASE": event["database"],
+                    "--ARCHIVE_ID": event["archive_id"],
+                    "--CONNECTION": f'{event["archive_id"]}-{event["database"]}-connection',
+                    "--MAPPINGS": json.dumps(mappings),
+                    "--TABLE_PRIMARY_KEY_MAPPINGS": json.dumps(
+                        table_primary_key_mappings
+                    ),
+                    "--ARCHIVE_OPTIONS": json.dumps(
+                        {
+                            "archival_start_date": dynamodb_response["Item"][
+                                "archival_start_date"
+                            ],
+                            "archival_end_date": dynamodb_response["Item"][
+                                "archival_end_date"
+                            ],
+                        }
+                    ),
+                    "--CONFIGURATION_OPTIONS": json.dumps(
+                        {
+                            "glue_capacity": configuration["glue"]["glue_capacity"],
+                            "glue_worker": configuration["glue"]["glue_worker"],
+                            "compression": configuration.get("compression", None),
+                            "partition_keys": configuration.get("partition_keys", None),
+                        }
+                    ),
+                },
+                Timeout=2880,
+                WorkerType=configuration["glue"]["glue_worker"],
+                NumberOfWorkers=int(configuration["glue"]["glue_capacity"]),
+            )
+
         elif event["database_engine"] == "mssql":
             response = client.start_job_run(
                 JobName=f'{event["archive_id"]}-{event["database"]}-{event["table"]}',
@@ -170,30 +233,6 @@ def lambda_handler(event, context):
                     }
                 },
             )
-            
-        elif event["database_engine"] == "postgresql":
-            response = client.start_job_run(
-                JobName=f'{event["archive_id"]}-{event["database"]}-{event["table"]}',
-                Arguments={
-                    "--job-language": "python",
-                    "--job-bookmark-option": "job-bookmark-disable",
-                    "--TempDir": f"s3://{temp_dir_parameter_value}/temporary/",
-                    "--enable-job-insights": "false",
-                    "--TABLE": event["table"],
-                    "--BUCKET": bucketParameter["Parameter"]["Value"],
-                    "--DATABASE": event["database"],
-                    "--ARCHIVE_ID": event["archive_id"],
-                    "--CONNECTION": f'{event["archive_id"]}-{event["database"]}-connection',
-                    "--MAPPINGS": json.dumps(mappings),
-                },
-                Timeout=2880,
-                WorkerType=dynamodb_response["Item"]["configuration"]["glue"][
-                    "glue_worker"
-                ],
-                NumberOfWorkers=int(
-                    dynamodb_response["Item"]["configuration"]["glue"]["glue_capacity"]
-                ),
-            )
 
             table.update_item(
                 Key={"id": event["archive_id"]},
@@ -213,12 +252,5 @@ def lambda_handler(event, context):
         print(ex)
         print("error")
         raise
-
-    # table.update_item(
-    #     Key={'id': event["Item"]["id"]},
-    #     UpdateExpression="SET archive_status= :s",
-    #     ExpressionAttributeValues={':s': 'Failed'},
-    #     ReturnValues="UPDATED_NEW"
-    # )
 
     return {"Payload": event}

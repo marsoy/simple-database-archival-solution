@@ -197,24 +197,55 @@ export function ValidationTable(
 		if (!isSelected) {
 			return 'Please select a table';
 		} else if (isSelected && validationQueueindicator) {
-			if (
-				Object.values(selectedItems[0][validationName]).length === 0 ||
-				selectedItems[0][validationName]['results'].length === 0
-			) {
+			if (Object.values(selectedItems[0][validationName]).length === 0) {
 				return 'This Validation Is Not Available';
 			} else {
-				console.log(selectedItems[0]);
-				return (
-					selectedItems[0][validationName]['query'] +
-					'\n' +
-					'/* ' +
-					validationName +
-					' ' +
-					(selectedItems[0][validationName]['results'][1]['Data'][0][
-						'VarCharValue'
-					] +
-						' */')
-				);
+				let validation_string = '';
+				if (
+					selectedItems[0][validationName]['archived']['results']
+						.length !== 0
+				) {
+					validation_string =
+						validation_string +
+						'Archived Validation' +
+						'\n' +
+						selectedItems[0][validationName]['archived']['query'] +
+						'\n' +
+						'/* ' +
+						validationName +
+						' ' +
+						(JSON.stringify(
+							selectedItems[0][validationName]['archived'][
+								'results'
+							]
+						) +
+							' */') +
+						'\n';
+				}
+				if (
+					'source_database' in selectedItems[0][validationName] &&
+					selectedItems[0][validationName]['source_database']
+						.length !== 0
+				) {
+					validation_string =
+						validation_string +
+						'Source Database Validation' +
+						'\n' +
+						selectedItems[0][validationName]['source_database'][
+							'query'
+						] +
+						'\n' +
+						'/* ' +
+						validationName +
+						' ' +
+						(JSON.stringify(
+							selectedItems[0][validationName]['source_database'][
+								'results'
+							]
+						) +
+							' */');
+				}
+				return validation_string;
 			}
 		} else if (validatingindicator) {
 			return 'Validation In-progress';
@@ -326,7 +357,7 @@ export function ValidationTable(
 					<SpaceBetween size="l">
 						<CodeEditor
 							ace={ace}
-							editorContentHeight={70}
+							editorContentHeight={150}
 							language="sql"
 							value={checkValidation(
 								isSelected,
@@ -342,7 +373,7 @@ export function ValidationTable(
 
 						<CodeEditor
 							ace={ace}
-							editorContentHeight={70}
+							editorContentHeight={150}
 							language="sql"
 							value={checkValidation(
 								isSelected,
@@ -358,7 +389,7 @@ export function ValidationTable(
 
 						<CodeEditor
 							ace={ace}
-							editorContentHeight={70}
+							editorContentHeight={200}
 							language="sql"
 							value={checkValidation(
 								isSelected,

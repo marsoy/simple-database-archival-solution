@@ -19,34 +19,43 @@ import os
 REGION = os.environ["REGION"]
 
 payload = {"Payload": []}
-dynamodb = boto3.resource('dynamodb', region_name=REGION)
-ssm = boto3.client('ssm')
+dynamodb = boto3.resource("dynamodb", region_name=REGION)
+ssm = boto3.client("ssm")
 
 
 def lambda_handler(event, context):
 
     # Get SSM Parameter for DynamoDB Table name
-    parameter = ssm.get_parameter(
-        Name='/archive/dynamodb-table', WithDecryption=True)
+    parameter = ssm.get_parameter(Name="/archive/dynamodb-table", WithDecryption=True)
 
-    table = dynamodb.Table(parameter['Parameter']['Value'])
+    table = dynamodb.Table(parameter["Parameter"]["Value"])
 
     try:
 
         for tbl in event:
             payload["Payload"].append(
-                {"archive_id": tbl["Payload"]["archive_id"],
-                 "table": tbl["Payload"]["table"],
-                 "database": tbl["Payload"]["database"],
-                 "table_details": tbl["Payload"]["schema"],
-                 "database_engine": tbl["Payload"]["database_engine"],
-                 "mssql_schema": tbl["Payload"]["mssql_schema"] if "mssql_schema" in tbl["Payload"] else None,
-                 "oracle_owner": tbl["Payload"]["oracle_owner"] if "oracle_owner" in tbl["Payload"] else None,
-                 })
+                {
+                    "archive_id": tbl["Payload"]["archive_id"],
+                    "table": tbl["Payload"]["table"],
+                    "database": tbl["Payload"]["database"],
+                    "table_details": tbl["Payload"]["schema"],
+                    "database_engine": tbl["Payload"]["database_engine"],
+                    "mssql_schema": (
+                        tbl["Payload"]["mssql_schema"]
+                        if "mssql_schema" in tbl["Payload"]
+                        else None
+                    ),
+                    "oracle_owner": (
+                        tbl["Payload"]["oracle_owner"]
+                        if "oracle_owner" in tbl["Payload"]
+                        else None
+                    ),
+                }
+            )
 
     except Exception as ex:
         print(ex)
-        print('error')
+        print("error")
         raise
 
     return payload

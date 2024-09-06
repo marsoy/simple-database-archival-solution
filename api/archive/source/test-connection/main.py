@@ -22,6 +22,7 @@ It uses environment variables for configuration, has built-in logging capabiliti
 sensitive data and building HTTP responses.
 """
 
+import boto3
 import json
 import logging
 import os
@@ -41,8 +42,10 @@ if logger.hasHandlers():
 else:
     logging.basicConfig(level=LOG_LEVEL)
 
-
 # endregion
+
+REGION = os.getenv("REGION")
+secret_client = boto3.client("secretsmanager", region_name=REGION)
 
 
 def mask_sensitive_data(event):
@@ -78,16 +81,26 @@ def lambda_handler(event, context):
     hostname = body["hostname"]
     port = body["port"]
     username = body["username"]
-    password = body["password"]
     database = body["database"]
     database_engine = body["database_engine"]
 
+    try:
+        secret_value = secret_client.get_secret_value(SecretId=f"{database}-{username}")
+        password = secret_value["SecretString"]
+    except Exception as e:
+        print(
+            f"Fetching secret for database: {database} user: {username} failed with exception: {str(e)}"
+        )
+        return build_response(500, "Server Error")
+
     if database_engine == "mysql":
-        connection = mysql.Connection(hostname,
-                                      port,
-                                      username,
-                                      password,
-                                      database, )
+        connection = mysql.Connection(
+            hostname,
+            port,
+            username,
+            password,
+            database,
+        )
         try:
             connected = connection.testConnection()
             response = {"connected": connected}
@@ -101,12 +114,9 @@ def lambda_handler(event, context):
         oracle_owner_list = oracle_owner.split(",")
         for owner in oracle_owner_list:
             try:
-                oracle_connection = oracle.Connection(hostname,
-                                                      port,
-                                                      username,
-                                                      password,
-                                                      database,
-                                                      owner)
+                oracle_connection = oracle.Connection(
+                    hostname, port, username, password, database, owner
+                )
                 connected = oracle_connection.testConnection()
                 response = {"connected": connected}
                 return build_response(200, json.dumps(response))
@@ -115,11 +125,13 @@ def lambda_handler(event, context):
                 return build_response(500, "Server Error")
 
     elif database_engine == "mssql":
-        connection = mssql.Connection(hostname,
-                                      port,
-                                      username,
-                                      password,
-                                      database, )
+        connection = mssql.Connection(
+            hostname,
+            port,
+            username,
+            password,
+            database,
+        )
         try:
             connected = connection.testConnection()
             response = {"connected": connected}
@@ -129,11 +141,15 @@ def lambda_handler(event, context):
             return build_response(500, "Server Error")
 
     elif database_engine == "postgresql":
-        connection = postgresql.Connection(hostname,
-                                           port,
-                                           username,
-                                           password,
-                                           database, )
+        schema = body["schema"] or "public"
+        connection = postgresql.Connection(
+            hostname,
+            port,
+            username,
+            password,
+            database,
+            schema,
+        )
         try:
             connected = connection.testConnection()
             response = {"connected": connected}

@@ -35,21 +35,23 @@ def lambda_handler(event, context):
     for message in event["Records"]:
         message_body = json.loads(message["body"])
 
-        dynamodb_response = table.get_item(Key={"id": message_body["archive_id"]})
+        archive_id = message_body["archive_id"]
+        dynamodb_response = table.get_item(Key={"id": archive_id})
 
         validation_completed_increment = dynamodb_response["Item"][
                                              "counters"]["validation"]["validation_completed"] + 1
         validation_count = dynamodb_response["Item"]["counters"]["validation"]["validation_count"]
+        print(f"archive_id: {archive_id} validation_completed: {validation_completed_increment} validation_count: {validation_count}")
 
         table.update_item(
-            Key={'id': message_body["archive_id"]},
+            Key={'id': archive_id},
             UpdateExpression="SET counters.validation.validation_completed = :s",
             ExpressionAttributeValues={':s': validation_completed_increment},
             ReturnValues="UPDATED_NEW"
         )
         if (validation_completed_increment == validation_count):
             table.update_item(
-                Key={'id': message_body["archive_id"]},
+                Key={'id': archive_id},
                 UpdateExpression="SET archive_status= :s",
                 ExpressionAttributeValues={':s': 'Archived'},
                 ReturnValues="UPDATED_NEW"

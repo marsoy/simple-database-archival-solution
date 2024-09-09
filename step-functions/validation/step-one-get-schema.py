@@ -45,6 +45,7 @@ def update_validation_count(archive_id):
     dynamodb_response = table.get_item(Key={"id": archive_id})
 
     validation_count = dynamodb_response["Item"]["counters"]["validation"]["validation_count"] + 1
+    print(f"archive_id: {archive_id} validation_count: {validation_count}")
 
     table.update_item(
         Key={'id': archive_id},

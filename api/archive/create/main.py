@@ -84,12 +84,16 @@ def lambda_handler(event, context):
         password = body["password"]
         database = body["database"]
         database_engine = body["database_engine"]
-        table_details = body["tables"]
-
-        for table in table_details:
+        table_details = []
+        for table in body["tables"]:
+            table_name = table["table"]
+            if table_name.startswith("auth") or table_name.startswith("django") or table_name.startswith("reversion"):
+                print(f"Skipped table {table_name} in step-four-glue-tables")
+                continue
             table["count_validation"] = {}
             table["string_validation"] = {}
             table["number_validation"] = {}
+            table_details.append(table)
 
         archive_id = str(uuid.uuid4())
         create_secret_response = client.create_secret(

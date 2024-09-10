@@ -111,7 +111,8 @@ def lambda_handler(event, context):
             tables = connection.get_schema()
 
         elif database_engine == "postgresql":
-            connection = postgresql.Connection(hostname, port, username, password, database)
+            schema = data["schema"]
+            connection = postgresql.Connection(hostname, port, username, password, database, schema)
             tables = connection.get_schema()
 
         # Update DynamoDB with the results

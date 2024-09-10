@@ -103,7 +103,7 @@ S3bucket_node4 = glueContext.write_dynamic_frame.from_options(
         "path": "s3://" + args["BUCKET"] + "/" + args["ARCHIVE_ID"] + "/" + args["DATABASE"] + "/" + args["TABLE"] + "/",
         "partitionKeys": partitionKeys,
     },
-    format_options={"compression": "uncompressed"},
+    format_options={"compression": "gzip"},
     transformation_ctx="S3bucket_node4",
 )
 

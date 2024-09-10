@@ -21,6 +21,7 @@ from pyspark.context import SparkContext
 from awsglue.context import GlueContext
 from awsglue.job import Job
 from awsglue.dynamicframe import DynamicFrame
+from pyspark.sql.functions import year, month, dayofmonth, to_utc_timestamp
 
 
 def directJDBCSource(
@@ -76,17 +77,35 @@ ApplyMapping_node2 = ApplyMapping.apply(
     transformation_ctx="ApplyMapping_node2",
 )
 
+# Script to partition the data
+partition_column = "created_at"
+df_with_partition = ApplyMapping_node2.toDF()
+partition_column_exists = partition_column.upper() in (name.upper() for name in df_with_partition.columns)
+if partition_column_exists:
+    df_with_partition = df_with_partition.withColumn(partition_column, to_utc_timestamp(df_with_partition[partition_column], "UTC"))
+    df_with_partition = df_with_partition.withColumn(
+        "year", year(df_with_partition[partition_column])
+    ).withColumn(
+        "month", month(df_with_partition[partition_column])
+    ).withColumn(
+        "day", dayofmonth(df_with_partition[partition_column])
+    )
+    print(df_with_partition.printSchema())
+
+AddPartition_node3 = DynamicFrame.fromDF(df_with_partition, glueContext, "AddPartition_node3")
+partitionKeys = ["year", "month", "day"] if partition_column_exists else []
+
 # Script generated for node S3 bucket
-S3bucket_node3 = glueContext.write_dynamic_frame.from_options(
-    frame=ApplyMapping_node2,
+S3bucket_node4 = glueContext.write_dynamic_frame.from_options(
+    frame=AddPartition_node3,
     connection_type="s3",
     format="glueparquet",
     connection_options={
         "path": "s3://" + args["BUCKET"] + "/" + args["ARCHIVE_ID"] + "/" + args["DATABASE"] + "/" + args["TABLE"] + "/",
-        "partitionKeys": [],
+        "partitionKeys": partitionKeys,
     },
-    format_options={"compression": "uncompressed"},
-    transformation_ctx="S3bucket_node3",
+    format_options={"compression": "snappy"},
+    transformation_ctx="S3bucket_node4",
 )
 
 job.commit()

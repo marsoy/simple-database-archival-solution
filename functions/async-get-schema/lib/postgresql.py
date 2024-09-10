@@ -120,12 +120,13 @@ def convert_schema(type):
 
 class Connection:
 
-    def __init__(self, hostname, port, username, password, database):
+    def __init__(self, hostname, port, username, password, database, schema):
         self.host = hostname
         self.port = port
         self.user = username
         self.password = password
         self.dbname = database
+        self.schema = schema
 
     def get_schema(self):
 
@@ -149,8 +150,8 @@ class Connection:
                 WHERE
                     table_type = 'BASE TABLE'
                 AND
-                    table_schema NOT IN ('pg_catalog', 'information_schema');
-                """
+                    table_schema = '{schema}';
+                """.format(schema=self.schema)
             )
             tables = cursor.fetchall()
             for table in tables:
@@ -168,13 +169,11 @@ class Connection:
                         FROM 
                             information_schema.columns
                         WHERE 
-                            table_name = '{0}';
-                        """
+                            table_name = '{tableName}' AND table_schema='{schema}';
+                        """.format(tableName=table[0].split('.', 1)[1], schema=self.schema)
 
                     table_cursor = table_connection.cursor()
-                    execute_sql_string = sql_string.format(
-                        table[0].split('.', 1)[1])
-                    table_cursor.execute(execute_sql_string)
+                    table_cursor.execute(sql_string)
 
                     
                     rows = table_cursor.fetchall()

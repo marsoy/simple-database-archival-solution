@@ -39,13 +39,18 @@ function BaseFormContent({
 
 	const createArchive = async (e) => {
 		setCreatingArchive(true);
-		const response = await API.post(
-			'api',
-			'api/archive/create',
-			databaseConnectionState
-		);
-		setCreatingArchive(false);
-		history.push('/');
+		try {
+			const response = await API.post(
+				'api',
+				'api/archive/create',
+				databaseConnectionState
+			);
+		} catch (error) {
+			console.log(error);
+		} finally {
+			setCreatingArchive(false);
+			history.push('/');
+		}
 	};
 
 	return (

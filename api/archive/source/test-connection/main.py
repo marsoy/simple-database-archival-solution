@@ -129,11 +129,13 @@ def lambda_handler(event, context):
             return build_response(500, "Server Error")
 
     elif database_engine == "postgresql":
+        schema = body["schema"]
         connection = postgresql.Connection(hostname,
                                            port,
                                            username,
                                            password,
-                                           database, )
+                                           database, 
+                                           schema,)
         try:
             connected = connection.testConnection()
             response = {"connected": connected}

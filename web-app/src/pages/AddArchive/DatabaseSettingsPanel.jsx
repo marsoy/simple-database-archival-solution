@@ -89,6 +89,7 @@ export default function DatabaseSettingsPanel({
 				password: archivePanelData.databasePassword || '',
 				database: archivePanelData.databaseName || '',
 				archive_name: archivePanelData.archiveName || '',
+				schema: archivePanelData.schema || '',
 				mode: archivePanelData.databaseMode || '',
 			},
 		};
@@ -244,6 +245,28 @@ export default function DatabaseSettingsPanel({
 								/>
 							</FormField>
 						</SpaceBetween>
+					</FormField>
+				) : (
+					<></>
+				)}
+
+				{databaseEngine === 'postgresql' ? (
+					<FormField
+						label="Schema Name"
+						description="Enter a the name of the schema. (Default: public)"
+						errorText={getErrorText(
+							'You must specify a root object.'
+						)}
+						i18nStrings={{ errorIconAriaLabel: 'Error' }}
+					>
+						<Input
+							value={archivePanelData.schema}
+							ariaRequired={false}
+							placeholder="public"
+							onChange={({ detail: { value } }) =>
+								onChange('schema', value)
+							}
+						/>
 					</FormField>
 				) : (
 					<></>

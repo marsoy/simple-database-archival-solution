@@ -26,6 +26,10 @@ import pytz
 # region Logging
 
 LOG_LEVEL = os.getenv("LOG_LEVEL", "INFO")
+SKIP_TABLE_PREFIXES = {
+    "postgresql": ["public.auth", "public.django", "public.reversion"],
+    "mysql": ["auth", "django", "reversion"]
+}
 logger = logging.getLogger()
 
 if logger.hasHandlers():
@@ -87,8 +91,9 @@ def lambda_handler(event, context):
         table_details = []
         for table in body["tables"]:
             table_name = table["table"]
-            if table_name.startswith("auth") or table_name.startswith("django") or table_name.startswith("reversion"):
-                print(f"Skipped table {table_name} in step-four-glue-tables")
+            table_prefixes = SKIP_TABLE_PREFIXES[database_engine]
+            if any(table_name.startswith(prefix) for prefix in table_prefixes):
+                print(f"Skipped database_engine: {database_engine} database: {database} table {table_name} in create archive")
                 continue
             table["count_validation"] = {}
             table["string_validation"] = {}

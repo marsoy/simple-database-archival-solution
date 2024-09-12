@@ -23,11 +23,10 @@ REGION = os.environ["REGION"]
 client = boto3.client(
     "glue",
     region_name=REGION,
-    config=Config(connect_timeout=5, read_timeout=60,
-                  retries={"max_attempts": 20}),
+    config=Config(connect_timeout=5, read_timeout=60, retries={"max_attempts": 20}),
 )
 dynamodb = boto3.resource("dynamodb", region_name=REGION)
-ssm = boto3.client("ssm")
+ssm = boto3.client("ssm", region_name=REGION)
 
 
 def lambda_handler(event, context):
@@ -35,10 +34,8 @@ def lambda_handler(event, context):
     bucketParameter = ssm.get_parameter(
         Name="/job/s3-bucket-table-data", WithDecryption=True
     )
-    parameter = ssm.get_parameter(
-        Name="/archive/dynamodb-table", WithDecryption=True)
-    temp_dir_parameter = ssm.get_parameter(
-        Name="/glue/temp-dir", WithDecryption=True)
+    parameter = ssm.get_parameter(Name="/archive/dynamodb-table", WithDecryption=True)
+    temp_dir_parameter = ssm.get_parameter(Name="/glue/temp-dir", WithDecryption=True)
 
     table = dynamodb.Table(parameter["Parameter"]["Value"])
     temp_dir_parameter_value = temp_dir_parameter["Parameter"]["Value"]
@@ -51,6 +48,12 @@ def lambda_handler(event, context):
         for schema in event["table_details"]:
             mappings.append(
                 [schema["key"], schema["value"], schema["key"], schema["value"]]
+            )
+
+        table_primary_key_mappings = {}
+        for table_detail in dynamodb_response["Item"]["table_details"]:
+            table_primary_key_mappings.update(
+                {table_detail["table"]: table_detail["primary_key"]}
             )
 
         if event["database_engine"] == "mysql":
@@ -67,6 +70,27 @@ def lambda_handler(event, context):
                     "--ARCHIVE_ID": event["archive_id"],
                     "--CONNECTION": f'{event["archive_id"]}-{event["database"]}-connection',
                     "--MAPPINGS": json.dumps(mappings),
+                    "--TABLE_PRIMARY_KEY_MAPPINGS": json.dumps(table_primary_key_mappings),
+                    "--ARCHIVE_OPTIONS": json.dumps(
+                        {
+                            "archival_start_date": dynamodb_response["Item"][
+                                "archival_start_date"
+                            ],
+                            "archival_end_date": dynamodb_response["Item"][
+                                "archival_end_date"
+                            ],
+                        }
+                    ),
+                    "--GLUE_OPTIONS": json.dumps(
+                        {
+                            "glue_capacity": dynamodb_response["Item"]["configuration"][
+                                "glue"
+                            ]["glue_capacity"],
+                            "glue_worker": dynamodb_response["Item"]["configuration"][
+                                "glue"
+                            ]["glue_worker"],
+                        }
+                    ),
                 },
                 Timeout=2880,
                 WorkerType=dynamodb_response["Item"]["configuration"]["glue"][
@@ -170,7 +194,7 @@ def lambda_handler(event, context):
                     }
                 },
             )
-            
+
         elif event["database_engine"] == "postgresql":
             response = client.start_job_run(
                 JobName=f'{event["archive_id"]}-{event["database"]}-{event["table"]}',
@@ -185,6 +209,27 @@ def lambda_handler(event, context):
                     "--ARCHIVE_ID": event["archive_id"],
                     "--CONNECTION": f'{event["archive_id"]}-{event["database"]}-connection',
                     "--MAPPINGS": json.dumps(mappings),
+                    "--TABLE_PRIMARY_KEY_MAPPINGS": json.dumps(table_primary_key_mappings),
+                    "--ARCHIVE_OPTIONS": json.dumps(
+                        {
+                            "archival_start_date": dynamodb_response["Item"][
+                                "archival_start_date"
+                            ],
+                            "archival_end_date": dynamodb_response["Item"][
+                                "archival_end_date"
+                            ],
+                        }
+                    ),
+                    "--GLUE_OPTIONS": json.dumps(
+                        {
+                            "glue_capacity": dynamodb_response["Item"]["configuration"][
+                                "glue"
+                            ]["glue_capacity"],
+                            "glue_worker": dynamodb_response["Item"]["configuration"][
+                                "glue"
+                            ]["glue_worker"],
+                        }
+                    ),
                 },
                 Timeout=2880,
                 WorkerType=dynamodb_response["Item"]["configuration"]["glue"][

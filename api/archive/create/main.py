@@ -13,7 +13,6 @@ express or implied. See the License for the specific language governing
 permissions and limitations under the License.
 """
 
-
 import json
 import boto3
 import logging
@@ -23,13 +22,11 @@ import datetime
 import uuid
 import pytz
 
+from constants import ARCHIVE_DATABASE_TABLES
+
 # region Logging
 
 LOG_LEVEL = os.getenv("LOG_LEVEL", "INFO")
-SKIP_TABLE_PREFIXES = {
-    "postgresql": ["public.auth", "public.django", "public.reversion"],
-    "mysql": ["auth", "django", "reversion"]
-}
 logger = logging.getLogger()
 
 if logger.hasHandlers():
@@ -39,9 +36,9 @@ else:
 
 # endregion
 
-ssm = boto3.client('ssm')
-client = boto3.client('secretsmanager')
-dynamodb_client = boto3.resource('dynamodb')
+ssm = boto3.client("ssm")
+client = boto3.client("secretsmanager")
+dynamodb_client = boto3.resource("dynamodb")
 
 
 def mask_sensitive_data(event):
@@ -76,9 +73,9 @@ def lambda_handler(event, context):
     try:
 
         parameter = ssm.get_parameter(
-            Name='/archive/dynamodb-table', WithDecryption=True)
-        body = json.loads(
-            event["body"]) if "body" in event else json.loads(event)
+            Name="/archive/dynamodb-table", WithDecryption=True
+        )
+        body = json.loads(event["body"]) if "body" in event else json.loads(event)
         archive_name = body["archive_name"]
 
         hostname = body["hostname"]
@@ -88,12 +85,17 @@ def lambda_handler(event, context):
         password = body["password"]
         database = body["database"]
         database_engine = body["database_engine"]
+        archival_start_date = body["archival_start_date"]
+        archival_end_date = body["archival_end_date"]
         table_details = []
+
+        archive_tables = ARCHIVE_DATABASE_TABLES.get(database, [])
         for table in body["tables"]:
             table_name = table["table"]
-            table_prefixes = SKIP_TABLE_PREFIXES[database_engine]
-            if any(table_name.startswith(prefix) for prefix in table_prefixes):
-                print(f"Skipped database_engine: {database_engine} database: {database} table {table_name} in create archive")
+            if archive_tables and table_name not in archive_tables:
+                print(
+                    f"Skipped database_engine: {database_engine} database: {database} table {table_name} in create archive"
+                )
                 continue
             table["count_validation"] = {}
             table["string_validation"] = {}
@@ -103,12 +105,12 @@ def lambda_handler(event, context):
         archive_id = str(uuid.uuid4())
         create_secret_response = client.create_secret(
             Name=archive_id,
-            Description=f'Secret for Archive ID {archive_id}',
+            Description=f"Secret for Archive ID {archive_id}",
             SecretString=password,
-            ForceOverwriteReplicaSecret=True
+            ForceOverwriteReplicaSecret=True,
         )
-        
-        table = dynamodb_client.Table(parameter['Parameter']['Value'])
+
+        table = dynamodb_client.Table(parameter["Parameter"]["Value"])
         dt = datetime.datetime.now(pytz.UTC)
 
         table.put_item(
@@ -122,29 +124,29 @@ def lambda_handler(event, context):
                 "username": username,
                 "secret_arn": create_secret_response["ARN"],
                 "database": database,
-                "oracle_owner": body["oracle_owner"] if 'oracle_owner' in body else "",
+                "oracle_owner": body["oracle_owner"] if "oracle_owner" in body else "",
+                "archival_start_date": archival_start_date,
+                "archival_end_date": archival_end_date,
                 "table_details": table_details,
                 "time_submitted": str(dt),
                 "archive_status": "Archive Queue",
                 "job_status": "",
                 "jobs": {},
-                "configuration": {"glue":
-                                  {
-                                      "glue_worker": "Standard",
-                                      "glue_capacity": 2
-                                  }
-                                  },
-                "counters": {"validation":
-                             {
-                                 "validation_count": 0,
-                                 "validation_completed": 0,
-                             }
-                             },
+                "configuration": {
+                    "glue": {"glue_worker": "Standard", "glue_capacity": 2}
+                },
+                "counters": {
+                    "validation": {
+                        "validation_count": 0,
+                        "validation_completed": 0,
+                    }
+                },
                 "legal_hold": False,
                 "expiration_status": False,
                 "expiration_date": "",
-                "delete_data": False
-            })
+                "delete_data": False,
+            }
+        )
 
         response = {"text": "Example response from authenticated api"}
         return build_response(200, json.dumps(response))

@@ -17,8 +17,8 @@ import boto3
 import os
 
 REGION = os.getenv("REGION")
-dynamodb = boto3.resource('dynamodb', region_name=REGION)
-ssm = boto3.client('ssm')
+dynamodb = boto3.resource("dynamodb", region_name=REGION)
+ssm = boto3.client("ssm")
 
 
 def update_validation_count(archive_id):
@@ -38,20 +38,21 @@ def update_validation_count(archive_id):
     >>> update_validation_count("abc123")
     """
 
-    parameter = ssm.get_parameter(
-        Name='/archive/dynamodb-table', WithDecryption=True)
-    table = dynamodb.Table(parameter['Parameter']['Value'])
+    parameter = ssm.get_parameter(Name="/archive/dynamodb-table", WithDecryption=True)
+    table = dynamodb.Table(parameter["Parameter"]["Value"])
 
     dynamodb_response = table.get_item(Key={"id": archive_id})
 
-    validation_count = dynamodb_response["Item"]["counters"]["validation"]["validation_count"] + 1
+    validation_count = (
+        dynamodb_response["Item"]["counters"]["validation"]["validation_count"] + 1
+    )
     print(f"archive_id: {archive_id} validation_count: {validation_count}")
 
     table.update_item(
-        Key={'id': archive_id},
+        Key={"id": archive_id},
         UpdateExpression="SET counters.validation.validation_count = :s",
-        ExpressionAttributeValues={':s': validation_count},
-        ReturnValues="UPDATED_NEW"
+        ExpressionAttributeValues={":s": validation_count},
+        ReturnValues="UPDATED_NEW",
     )
 
 
@@ -95,48 +96,58 @@ def lambda_handler(event, context):
 
     # Count Validation
     update_validation_count(event["table"]["archive_id"])
-    return_event.append({
-        "table": event["table"]["table"],
-        "archive_id": event["table"]["archive_id"],
-        "database": event["table"]["database"],
-        "database_engine": event["table"]["database_engine"],
-        "oracle_owner": event["table"]["oracle_owner"],
-        "validation_type": "count_validation"
-    })
+    return_event.append(
+        {
+            "table": event["table"]["table"],
+            "archive_id": event["table"]["archive_id"],
+            "database": event["table"]["database"],
+            "database_engine": event["table"]["database_engine"],
+            "oracle_owner": event["table"]["oracle_owner"],
+            "validation_type": "count_validation",
+        }
+    )
 
     # String Validation
     for schema in event["table"]["schema"][::-1]:
         if schema["value"] == "string":
             update_validation_count(event["table"]["archive_id"])
-            return_event.append({
-                "table": event["table"]["table"],
-                "archive_id": event["table"]["archive_id"],
-                "database": event["table"]["database"],
-                "database_engine": event["table"]["database_engine"],
-                "oracle_owner": event["table"]["oracle_owner"],
-                "key": schema["key"],
-                "value": schema["value"],
-                "validation_type": "string_validation"
-            })
+            return_event.append(
+                {
+                    "table": event["table"]["table"],
+                    "archive_id": event["table"]["archive_id"],
+                    "database": event["table"]["database"],
+                    "database_engine": event["table"]["database_engine"],
+                    "oracle_owner": event["table"]["oracle_owner"],
+                    "key": schema["key"],
+                    "value": schema["value"],
+                    "validation_type": "string_validation",
+                }
+            )
             string_counter += 1
         if string_counter == 1:
             break
 
     # Number Validation
     for schema in event["table"]["schema"][::-1]:
-        if schema["value"] == "decimal" or schema["value"] == "number" or schema["value"] == "decimal" or schema[
-            "value"] == "int":
+        if (
+            schema["value"] == "decimal"
+            or schema["value"] == "number"
+            or schema["value"] == "decimal"
+            or schema["value"] == "int"
+        ):
             update_validation_count(event["table"]["archive_id"])
-            return_event.append({
-                "table": event["table"]["table"],
-                "archive_id": event["table"]["archive_id"],
-                "database": event["table"]["database"],
-                "database_engine": event["table"]["database_engine"],
-                "oracle_owner": event["table"]["oracle_owner"],
-                "key": schema["key"],
-                "value": schema["value"],
-                "validation_type": "number_validation"
-            })
+            return_event.append(
+                {
+                    "table": event["table"]["table"],
+                    "archive_id": event["table"]["archive_id"],
+                    "database": event["table"]["database"],
+                    "database_engine": event["table"]["database_engine"],
+                    "oracle_owner": event["table"]["oracle_owner"],
+                    "key": schema["key"],
+                    "value": schema["value"],
+                    "validation_type": "number_validation",
+                }
+            )
             number_counter += 1
         if number_counter == 1:
             break

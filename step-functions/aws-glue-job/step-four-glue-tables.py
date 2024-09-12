@@ -19,7 +19,7 @@ import os
 REGION = os.getenv("REGION")
 client = boto3.client('glue', region_name=REGION)
 dynamodb = boto3.resource('dynamodb', region_name=REGION)
-ssm = boto3.client('ssm')
+ssm = boto3.client('ssm', region_name=REGION)
 
 
 def lambda_handler(event, context):
@@ -42,20 +42,19 @@ def lambda_handler(event, context):
                                 'Comment': ''})
             try:
                 client.get_table(
-                    DatabaseName=f'{event["Item"]["id"]}-{event["Item"]["database"]}-database',
-                    Name=f'{event["Item"]["id"]}-{event["Item"]["database"]}-{tbl["table"]}-table',
+                    DatabaseName=f'{event["Item"]["database"]}-database',
+                    Name=f'{event["Item"]["database"]}-{tbl["table"]}-table',
                 )
-
             except:
                 bucketName = bucketParameter['Parameter']['Value']
                 client.create_table(
-                    DatabaseName=f'{event["Item"]["id"]}-{event["Item"]["database"]}-database',
+                    DatabaseName=f'{event["Item"]["database"]}-database',
                     TableInput={
-                        'Name': f'{event["Item"]["id"]}-{event["Item"]["database"]}-{tbl["table"]}-table',
+                        'Name': f'{event["Item"]["database"]}-{tbl["table"]}-table',
                         'Description': 'TO ADD',
                         'StorageDescriptor': {
                             'Columns': columns,
-                            'Location': f's3://{bucketName}/{event["Item"]["id"]}/{event["Item"]["database"]}/{tbl["table"]}',
+                            'Location': f's3://{bucketName}/{event["Item"]["database"]}/{tbl["table"]}',
                             'InputFormat': 'org.apache.hadoop.hive.ql.io.parquet.MapredParquetInputFormat',
                             'OutputFormat': 'org.apache.hadoop.hive.ql.io.parquet.MapredParquetOutputFormat',
                             'Compressed': False,

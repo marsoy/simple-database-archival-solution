@@ -31,11 +31,11 @@ else:
 def convert_schema(type):
 
     if "char" in type:
-        if (type == "varchar"):
+        if type == "varchar":
             return "varchar"
         else:
             return "string"
-    elif ("boolean" == type or "tinyint(1)" == type):
+    elif "boolean" == type or "tinyint(1)" == type:
         return "boolean"
     elif "bigint" == type:
         return "bigint"
@@ -81,7 +81,8 @@ class Connection:
                 password=self.password,
                 database=self.database,
                 charset="utf8mb4",
-                cursorclass=pymysql.cursors.DictCursor)
+                cursorclass=pymysql.cursors.DictCursor,
+            )
 
             cursor = connection.cursor()
             cursor.execute("SHOW TABLES")
@@ -94,18 +95,34 @@ class Connection:
                     password=self.password,
                     database=self.database,
                     charset="utf8mb4",
-                    cursorclass=pymysql.cursors.DictCursor)
+                    cursorclass=pymysql.cursors.DictCursor,
+                )
                 try:
                     table_cursor = table_connection.cursor()
                     table_cursor.execute(
-                        f"DESCRIBE {self.database}.{list(table.values())[0]}")
+                        f"DESCRIBE {self.database}.{list(table.values())[0]}"
+                    )
                     row_list = []
+                    primary_key = ""
                     for row in table_cursor.fetchall():
+                        if row["Key"] == "PRI" and "int" in row["Type"]:
+                            primary_key = row["Field"]
                         row_type = convert_schema(row["Type"])
                         row_list.append(
-                            {"key": row["Field"], "value": row_type, "origin_type": row["Type"],  "existing": True})
+                            {
+                                "key": row["Field"],
+                                "value": row_type,
+                                "origin_type": row["Type"],
+                                "existing": True,
+                            }
+                        )
                     table_list.append(
-                        {"table": list(table.values())[0], "schema": row_list})
+                        {
+                            "table": list(table.values())[0],
+                            "schema": row_list,
+                            "primary_key": primary_key,
+                        }
+                    )
                 except Exception as e:
                     logger.error(traceback.format_exc())
                     raise

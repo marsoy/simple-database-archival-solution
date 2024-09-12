@@ -34,14 +34,14 @@ def lambda_handler(event, context):
     # exist, create a database.
     try:
         response = client.get_database(
-            Name=f'{event["Item"]["id"]}-{event["Item"]["database"]}-database'
+            Name=f'{event["Item"]["database"]}-database'
         )
         print(response)
     except:
         try:
             client.create_database(
                 DatabaseInput={
-                    'Name': f'{event["Item"]["id"]}-{event["Item"]["database"]}-database',
+                    'Name': f'{event["Item"]["database"]}-database',
                     'Description': f'Database for archive ID: {event["Item"]["id"]}',
                 }
             )

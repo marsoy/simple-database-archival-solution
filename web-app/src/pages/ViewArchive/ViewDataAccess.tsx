@@ -149,16 +149,16 @@ export function ViewData(
 
 		if (validationQueueindicator) {
 			setSqlStatement(
-				`SELECT * FROM \"${fullData['id']}-${fullData[
+				`SELECT * FROM \"${fullData[
 					'database'
-				].toLowerCase()}-database\".\"${fullData['id']}-${fullData[
+				].toLowerCase()}-database\".\"${fullData[
 					'database'
 				].toLowerCase()}-${data[0]['table']}-table\" limit 10;`
 			);
 
-			return `SELECT * FROM \"${fullData['id']}-${fullData[
+			return `SELECT * FROM \"${fullData[
 				'database'
-			].toLowerCase()}-database\".\"${fullData['id']}-${fullData[
+			].toLowerCase()}-database\".\"${fullData[
 				'database'
 			].toLowerCase()}-${data[0]['table']}-table\" limit 10;`;
 		} else {

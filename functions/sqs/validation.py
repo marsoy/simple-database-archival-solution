@@ -18,8 +18,8 @@ import json
 import os
 
 REGION = os.getenv("REGION")
-ssm = boto3.client('ssm')
-sqs_client = boto3.client('sqs')
+ssm = boto3.client('ssm', region_name=REGION)
+sqs_client = boto3.client('sqs', region_name=REGION)
 dynamodb = boto3.resource('dynamodb', region_name=REGION)
 
 

@@ -138,7 +138,8 @@ class Connection:
                 port=self.port,
                 user=self.user,
                 password=self.password,
-                dbname=self.dbname)
+                dbname=self.dbname,
+            )
 
             cursor = connection.cursor()
             cursor.execute(
@@ -151,7 +152,9 @@ class Connection:
                     table_type = 'BASE TABLE'
                 AND
                     table_schema = '{schema}';
-                """.format(schema=self.schema)
+                """.format(
+                    schema=self.schema
+                )
             )
             tables = cursor.fetchall()
             for table in tables:
@@ -160,8 +163,31 @@ class Connection:
                     port=self.port,
                     user=self.user,
                     password=self.password,
-                    dbname=self.dbname)
+                    dbname=self.dbname,
+                )
                 try:
+                    table_name = table[0].split(".", 1)[1]
+                    primary_key_query = """
+                    SELECT
+                        pg_attribute.attname
+                    FROM 
+                        pg_index, pg_class, pg_attribute, pg_namespace
+                    WHERE
+                        pg_class.oid = '{tableName}'::regclass AND indrelid = pg_class.oid AND
+                        nspname = '{schema}' AND
+                        pg_class.relnamespace = pg_namespace.oid AND
+                        pg_attribute.attrelid = pg_class.oid AND
+                        pg_attribute.attnum = any(pg_index.indkey)
+                        AND indisprimary
+                    """.format(
+                        tableName=table_name, schema=self.schema
+                    )
+                    table_cursor = table_connection.cursor()
+                    table_cursor.execute(primary_key_query)
+                    response = table_cursor.fetchall()
+                    # sample response [(primary_key,)]
+                    if len(response) != 0:
+                        primary_key = response[0][0]
 
                     sql_string = """
                         SELECT 
@@ -170,12 +196,13 @@ class Connection:
                             information_schema.columns
                         WHERE 
                             table_name = '{tableName}' AND table_schema='{schema}';
-                        """.format(tableName=table[0].split('.', 1)[1], schema=self.schema)
+                        """.format(
+                        tableName=table_name, schema=self.schema
+                    )
 
                     table_cursor = table_connection.cursor()
                     table_cursor.execute(sql_string)
 
-                    
                     rows = table_cursor.fetchall()
                     if len(rows) != 0:
                         row_list = []
@@ -187,12 +214,17 @@ class Connection:
                                     "value": row_type,
                                     "origin_type": row[1],
                                     "existing": True,
-                                    "is_nullable": row[2]
+                                    "is_nullable": row[2],
                                 }
                             )
                         if len(rows) != 0:
                             table_list.append(
-                                {"table": table[0], "schema": row_list})
+                                {
+                                    "table": table[0],
+                                    "schema": row_list,
+                                    "primary_key": primary_key,
+                                }
+                            )
                 except Exception as e:
                     logger.error(traceback.format_exc())
                     raise

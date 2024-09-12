@@ -383,6 +383,25 @@ function ViewArchive() {
 											)}
 										</div>
 									</div>
+									<div>
+										<Box variant="awsui-key-label">
+											Archival Start Date
+										</Box>
+										<div>
+											{
+												archiveData.Item
+													.archival_start_date
+											}
+										</div>
+									</div>
+									<div>
+										<Box variant="awsui-key-label">
+											Archive End Date
+										</Box>
+										<div>
+											{archiveData.Item.archival_end_date}
+										</div>
+									</div>
 								</ColumnLayout>
 							</Container>
 						)}

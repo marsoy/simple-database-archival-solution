@@ -90,6 +90,8 @@ export default function DatabaseSettingsPanel({
 				database: archivePanelData.databaseName || '',
 				archive_name: archivePanelData.archiveName || '',
 				schema: archivePanelData.schema || '',
+				archival_start_date: archivePanelData.archivalStartDate || '',
+				archival_end_date: archivePanelData.archivalEndDate || '',
 				mode: archivePanelData.databaseMode || '',
 			},
 		};
@@ -187,8 +189,7 @@ export default function DatabaseSettingsPanel({
 						<FormField
 							stretch={true}
 							description="Enter the username for the connection."
-							className="date-time-container"
-							errorText={getErrorText('Invalid time format.')}
+							errorText={getErrorText('Invalid format.')}
 							i18nStrings={{ errorIconAriaLabel: 'Error' }}
 						>
 							<Input
@@ -203,8 +204,7 @@ export default function DatabaseSettingsPanel({
 						<FormField
 							stretch={true}
 							description="Enter the password for the connection."
-							className="date-time-container"
-							errorText={getErrorText('Invalid time format.')}
+							errorText={getErrorText('Invalid')}
 							i18nStrings={{ errorIconAriaLabel: 'Error' }}
 						>
 							<Input
@@ -282,9 +282,7 @@ export default function DatabaseSettingsPanel({
 						<FormField
 							stretch={true}
 							description="Enter the port number of the database."
-							className="date-time-container"
-							// constraintText={'Use YYYY/MM/DD format.'}
-							errorText={getErrorText('Invalid time format.')}
+							errorText={getErrorText('Invalid number format.')}
 							i18nStrings={{ errorIconAriaLabel: 'Error' }}
 						>
 							<Input
@@ -306,6 +304,52 @@ export default function DatabaseSettingsPanel({
 								}
 								onChange={({ detail: { value } }) =>
 									onChange('databasePort', value)
+								}
+							/>
+						</FormField>
+					</SpaceBetween>
+				</FormField>
+
+				<FormField
+					stretch={true}
+					label={
+						<span id="certificate-expiry-label">
+							Archival Duration
+						</span>
+					}
+				>
+					<SpaceBetween size="s" direction="horizontal">
+						<FormField
+							stretch={true}
+							description="Enter the start date"
+							className="date-time-container"
+							errorText={getErrorText('Invalid date format.')}
+							i18nStrings={{ errorIconAriaLabel: 'Error' }}
+						>
+							<Input
+								value={archivePanelData.archivalStartDate}
+								ariaRequired={false}
+								placeholder=""
+								type="date"
+								onChange={({ detail: { value } }) =>
+									onChange('archivalStartDate', value)
+								}
+							/>
+						</FormField>
+						<FormField
+							stretch={true}
+							description="Enter the end date"
+							className="date-time-container"
+							errorText={getErrorText('Invalid date format.')}
+							i18nStrings={{ errorIconAriaLabel: 'Error' }}
+						>
+							<Input
+								value={archivePanelData.archivalEndDate}
+								ariaRequired={false}
+								placeholder=""
+								type="date"
+								onChange={({ detail: { value } }) =>
+									onChange('archivalEndDate', value)
 								}
 							/>
 						</FormField>

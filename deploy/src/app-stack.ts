@@ -567,6 +567,9 @@ export class AppStack extends cdk.Stack {
                 'glue:GetDatabase',
                 'glue:GetTable',
                 'glue:GetJobRun',
+                'glue:UpdateTable',
+                'glue:CreatePartition',
+                'glue:BatchCreatePartition',
             ],
             resources: [`arn:aws:glue:${awsRegion}:${awsAccountId}:*`],
         });

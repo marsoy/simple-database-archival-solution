@@ -86,7 +86,6 @@ export default function DatabaseSettingsPanel({
 				hostname: archivePanelData.databaseHostname || '',
 				port: archivePanelData.databasePort || '',
 				username: archivePanelData.databaseUsername || '',
-				password: archivePanelData.databasePassword || '',
 				database: archivePanelData.databaseName || '',
 				archive_name: archivePanelData.archiveName || '',
 				schema: archivePanelData.schema || '',
@@ -118,7 +117,6 @@ export default function DatabaseSettingsPanel({
 		archivePanelData.databaseName !== undefined &&
 		archivePanelData.databaseHostname !== undefined &&
 		archivePanelData.databasePort !== undefined &&
-		archivePanelData.databasePassword !== undefined &&
 		archivePanelData.databaseUsername !== undefined &&
 		archivePanelData.databaseMode !== undefined &&
 		databaseEngine !== undefined;
@@ -198,22 +196,6 @@ export default function DatabaseSettingsPanel({
 								placeholder=""
 								onChange={({ detail: { value } }) =>
 									onChange('databaseUsername', value)
-								}
-							/>
-						</FormField>
-						<FormField
-							stretch={true}
-							description="Enter the password for the connection."
-							errorText={getErrorText('Invalid')}
-							i18nStrings={{ errorIconAriaLabel: 'Error' }}
-						>
-							<Input
-								value={archivePanelData.databasePassword}
-								ariaRequired={true}
-								placeholder=""
-								type="password"
-								onChange={({ detail: { value } }) =>
-									onChange('databasePassword', value)
 								}
 							/>
 						</FormField>

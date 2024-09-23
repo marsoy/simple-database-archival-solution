@@ -41,7 +41,7 @@ def number_validation(ARCHIVE_ID, DATABASE_NAME, TABLE_NAME, TABLE_INDEX, ROW_KE
         query = (
             'SELECT SUM("'
             + ROW_KEY
-            + '") from "'
+            + '") AS NUMBERCOUNT from "'
             + DATABASE_NAME
             + '-database"."'
             + DATABASE_NAME
@@ -65,6 +65,7 @@ def number_validation(ARCHIVE_ID, DATABASE_NAME, TABLE_NAME, TABLE_INDEX, ROW_KE
                 "table_name": TABLE_NAME,
                 "validation_type": "number_validation",
                 "query": query,
+                "row_key": ROW_KEY,
             }
         )
 

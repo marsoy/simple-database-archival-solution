@@ -509,6 +509,7 @@ export class AppStack extends cdk.Stack {
                 'athena:StartQueryExecution',
                 'athena:GetQueryResults',
                 'glue:GetTable',
+                'glue:GetPartitions',
             ],
             resources: [
                 `arn:aws:athena:${this.region}:${awsAccountId}:*`,
@@ -522,7 +523,7 @@ export class AppStack extends cdk.Stack {
         });
 
         const glueCatalogPolicy = new iam.PolicyStatement({
-            actions: ['glue:GetTable'],
+            actions: ['glue:GetTable', 'glue:GetPartitions'],
             resources: [`arn:aws:glue:${awsRegion}:${awsAccountId}:catalog`],
         });
 
@@ -636,6 +637,11 @@ export class AppStack extends cdk.Stack {
             }
         );
 
+        // TODO: Remove this or find alternative for database connection test
+        testConnectionRole.addToPolicy(
+            secretsmanagerGetSecretValue
+        );
+
         // Create a security group for the RDS
         const rdsSecurityGroup = new ec2.SecurityGroup(
             this,
@@ -707,6 +713,10 @@ export class AppStack extends cdk.Stack {
                 actions: ['dynamodb:GetItem', 'dynamodb:UpdateItem'],
                 resources: [fetchTablesSchemaAsync.tableArn],
             })
+        );
+
+        backgroundGetSourceTablesRole.addToPolicy(
+            secretsmanagerGetSecretValue
         );
 
         const backgroundGetSourceTablesLambda = new lambdaPython.PythonFunction(
@@ -849,7 +859,7 @@ export class AppStack extends cdk.Stack {
                 iamInlinePolicy: [
                     dynamoDbWritePolicy,
                     ssmGetParameterPolicy,
-                    secretsmanagerCreateSecret,
+                    secretsmanagerGetSecretValue,
                 ],
             },
             {

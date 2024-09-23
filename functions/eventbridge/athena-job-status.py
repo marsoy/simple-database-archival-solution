@@ -19,7 +19,7 @@ import os
 
 REGION = os.getenv("REGION")
 
-client = boto3.client("athena")
+client = boto3.client("athena", region_name=REGION)
 sqs = boto3.client('sqs')
 dynamodb = boto3.resource('dynamodb', region_name=REGION)
 ssm = boto3.client('ssm')
@@ -33,9 +33,17 @@ def get_athena_response(query_execution_id):
     )
     return response
 
+def get_athena_result_map(response):
+    rows = response["ResultSet"]["Rows"]
+    if len(rows) != 0:
+        key = rows[0]["Data"][0]["VarCharValue"]
+        value = rows[1]["Data"][0]["VarCharValue"]
+        return {key, value}
+    return {}
+
 
 # Set Job State Function
-def update_validation_state(archive_id, query_execution_id, table_name, validation_type, athena_response, query,
+def update_validation_state(archive_id, query_execution_id, table_name, validation_type, athena_response, query, row_key,
                             status_message):
     parameter = ssm.get_parameter(
         Name='/archive/dynamodb-table', WithDecryption=True)
@@ -57,7 +65,8 @@ def update_validation_state(archive_id, query_execution_id, table_name, validati
                         "query_execution_id": query_execution_id,
                         "query": query,
                         "state": status_message,
-                        "results": athena_response["ResultSet"]["Rows"]
+                        "row_key": row_key,
+                        "results": get_athena_result_map(response=athena_response)
                     }
                 }
             )
@@ -102,12 +111,13 @@ def get_archive(query_execution_id):
     table_name = dynamodb_response["Item"]["table_name"]
     validation_type = dynamodb_response["Item"]["validation_type"]
     query = dynamodb_response["Item"]["query"]
+    row_key = dynamodb_response["Item"]["row_key"]
 
-    return archive_id, table_name, validation_type, query
+    return archive_id, table_name, validation_type, query, row_key
 
 
 def lambda_handler(event, context):
-    archive_id, table_name, validation_type, query = get_archive(
+    archive_id, table_name, validation_type, query, row_key = get_archive(
         event["detail"]["queryExecutionId"])
     athena_response = get_athena_response(event["detail"]["queryExecutionId"])
 
@@ -120,6 +130,7 @@ def lambda_handler(event, context):
             validation_type,
             athena_response,
             query,
+            row_key,
             "SUCCEEDED"
         )
     elif event["detail"]["currentState"] == "FAILED":

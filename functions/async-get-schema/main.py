@@ -25,7 +25,8 @@ from lib import postgresql
 
 REGION = os.getenv("REGION")
 DYNAMODB_TABLE = os.getenv("DYNAMODB_TABLE")
-dynamodb = boto3.resource('dynamodb')
+dynamodb = boto3.resource("dynamodb")
+secret_client = boto3.client("secretsmanager", region_name=REGION)
 
 LOG_LEVEL = os.getenv("LOG_LEVEL", "INFO")
 logger = logging.getLogger()
@@ -65,7 +66,7 @@ def update_dynamodb(job_id, status, tables=None):
         Key={"id": job_id},
         UpdateExpression=update_expression,
         ExpressionAttributeValues=expression_attribute_values,
-        ExpressionAttributeNames=expression_attribute_names
+        ExpressionAttributeNames=expression_attribute_names,
     )
 
 
@@ -85,9 +86,19 @@ def lambda_handler(event, context):
         hostname = data["hostname"]
         port = data["port"]
         username = data["username"]
-        password = data["password"]
         database = data["database"]
         database_engine = data["database_engine"]
+
+        try:
+            secret_value = secret_client.get_secret_value(
+                SecretId=f"{database}-{username}"
+            )
+            password = secret_value["SecretString"]
+        except Exception as e:
+            print(
+                f"Fetching secret for database: {database} user: {username} failed with exception: {str(e)}"
+            )
+            return {"statusCode": 500, "body": json.dumps({"message": "Server Error"})}
 
         tables = []
 
@@ -96,7 +107,9 @@ def lambda_handler(event, context):
             oracle_owner_list = oracle_owner.split(",")
 
             for owner in oracle_owner_list:
-                oracle_connection = oracle.Connection(hostname, port, username, password, database, owner)
+                oracle_connection = oracle.Connection(
+                    hostname, port, username, password, database, owner
+                )
                 tables_connection = oracle_connection.get_schema()
                 for table in tables_connection:
                     table["oracle_owner"] = owner
@@ -112,7 +125,9 @@ def lambda_handler(event, context):
 
         elif database_engine == "postgresql":
             schema = data["schema"]
-            connection = postgresql.Connection(hostname, port, username, password, database, schema)
+            connection = postgresql.Connection(
+                hostname, port, username, password, database, schema
+            )
             tables = connection.get_schema()
 
         # Update DynamoDB with the results

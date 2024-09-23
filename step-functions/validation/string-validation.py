@@ -72,6 +72,7 @@ def count_validation(ARCHIVE_ID, DATABASE_NAME, TABLE_NAME, TABLE_INDEX, ROW_KEY
                 "table_name": TABLE_NAME,
                 "validation_type": "string_validation",
                 "query": query,
+                "row_key": ROW_KEY,
             }
         )
 

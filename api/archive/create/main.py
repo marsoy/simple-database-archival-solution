@@ -36,8 +36,10 @@ else:
 
 # endregion
 
+REGION = os.getenv("REGION")
+
 ssm = boto3.client("ssm")
-client = boto3.client("secretsmanager")
+secret_client = boto3.client("secretsmanager", region_name=REGION)
 dynamodb_client = boto3.resource("dynamodb")
 
 
@@ -82,12 +84,22 @@ def lambda_handler(event, context):
         mode = body["mode"]
         port = body["port"]
         username = body["username"]
-        password = body["password"]
         database = body["database"]
         database_engine = body["database_engine"]
         archival_start_date = body["archival_start_date"]
         archival_end_date = body["archival_end_date"]
         table_details = []
+
+        try:
+            secret_value = secret_client.get_secret_value(
+                SecretId=f"{database}-{username}"
+            )
+            secret_arn = secret_value["ARN"]
+        except Exception as e:
+            print(
+                f"Fetching secret for database: {database} user: {username} failed with exception: {str(e)}"
+            )
+            return build_response(500, "Server Error")
 
         archive_tables = ARCHIVE_DATABASE_TABLES.get(database, [])
         for table in body["tables"]:
@@ -103,13 +115,6 @@ def lambda_handler(event, context):
             table_details.append(table)
 
         archive_id = str(uuid.uuid4())
-        create_secret_response = client.create_secret(
-            Name=archive_id,
-            Description=f"Secret for Archive ID {archive_id}",
-            SecretString=password,
-            ForceOverwriteReplicaSecret=True,
-        )
-
         table = dynamodb_client.Table(parameter["Parameter"]["Value"])
         dt = datetime.datetime.now(pytz.UTC)
 
@@ -122,7 +127,7 @@ def lambda_handler(event, context):
                 "hostname": hostname,
                 "port": port,
                 "username": username,
-                "secret_arn": create_secret_response["ARN"],
+                "secret_arn": secret_arn,
                 "database": database,
                 "oracle_owner": body["oracle_owner"] if "oracle_owner" in body else "",
                 "archival_start_date": archival_start_date,

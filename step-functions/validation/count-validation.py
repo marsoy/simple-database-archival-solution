@@ -41,7 +41,7 @@ def count_validation(ARCHIVE_ID, DATABASE_NAME, TABLE_NAME, TABLE_INDEX):
     try:
 
         query = (
-            'SELECT COUNT(*) from "'
+            'SELECT COUNT(*) AS ROWCOUNT from "'
             + DATABASE_NAME
             + '-database"."'
             + DATABASE_NAME
@@ -65,6 +65,7 @@ def count_validation(ARCHIVE_ID, DATABASE_NAME, TABLE_NAME, TABLE_INDEX):
                 "table_name": TABLE_NAME,
                 "validation_type": "count_validation",
                 "query": query,
+                "row_key": None,
             }
         )
 

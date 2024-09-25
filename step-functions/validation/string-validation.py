@@ -22,7 +22,7 @@ ssm = boto3.client("ssm")
 dynamodb = boto3.resource("dynamodb", region_name=REGION)
 
 
-def count_validation(ARCHIVE_ID, DATABASE_NAME, TABLE_NAME, TABLE_INDEX, ROW_KEY):
+def string_validation(ARCHIVE_ID, DATABASE_NAME, TABLE_NAME, TABLE_INDEX, ROW_KEY):
 
     parameter = ssm.get_parameter(Name="/archive/dynamodb-table", WithDecryption=True)
     query_parameter = ssm.get_parameter(
@@ -79,7 +79,7 @@ def count_validation(ARCHIVE_ID, DATABASE_NAME, TABLE_NAME, TABLE_INDEX, ROW_KEY
         # Add validation to archive record
         table.update_item(
             Key={"id": ARCHIVE_ID},
-            UpdateExpression=f"set table_details[{TABLE_INDEX}].string_validation = :newJob",
+            UpdateExpression=f"set table_details[{TABLE_INDEX}].string_validation.archived = :newJob",
             ExpressionAttributeValues={
                 ":newJob": {
                     "query_execution_id": response["QueryExecutionId"],
@@ -115,6 +115,6 @@ def lambda_handler(event, context):
     # Count Validation
     for index, item in enumerate(dynamodb_response["Item"]["table_details"]):
         if item["table"] == TABLE_NAME:
-            count_validation(ARCHIVE_ID, DATABASE_NAME, TABLE_NAME, index, ROW_KEY)
+            string_validation(ARCHIVE_ID, DATABASE_NAME, TABLE_NAME, index, ROW_KEY)
 
     return event

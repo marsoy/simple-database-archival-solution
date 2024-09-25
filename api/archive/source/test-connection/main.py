@@ -141,7 +141,7 @@ def lambda_handler(event, context):
             return build_response(500, "Server Error")
 
     elif database_engine == "postgresql":
-        schema = body["schema"]
+        schema = body["schema"] or "public"
         connection = postgresql.Connection(
             hostname,
             port,

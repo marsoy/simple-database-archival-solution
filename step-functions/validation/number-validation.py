@@ -72,7 +72,7 @@ def number_validation(ARCHIVE_ID, DATABASE_NAME, TABLE_NAME, TABLE_INDEX, ROW_KE
         # Add validation to archive record
         table.update_item(
             Key={"id": ARCHIVE_ID},
-            UpdateExpression=f"set table_details[{TABLE_INDEX}].number_validation = :newJob",
+            UpdateExpression=f"set table_details[{TABLE_INDEX}].number_validation.archived = :newJob",
             ExpressionAttributeValues={
                 ":newJob": {
                     "query_execution_id": response["QueryExecutionId"],

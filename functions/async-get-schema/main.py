@@ -124,7 +124,7 @@ def lambda_handler(event, context):
             tables = connection.get_schema()
 
         elif database_engine == "postgresql":
-            schema = data["schema"]
+            schema = data["schema"] or "public"
             connection = postgresql.Connection(
                 hostname, port, username, password, database, schema
             )

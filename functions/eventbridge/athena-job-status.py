@@ -59,7 +59,7 @@ def update_validation_state(archive_id, query_execution_id, table_name, validati
         if item["table"] == table_name:
             table.update_item(
                 Key={'id': archive_id},
-                UpdateExpression=f'set table_details[{index}].{validation_type} = :newJob',
+                UpdateExpression=f'set table_details[{index}].{validation_type}.archived = :newJob',
                 ExpressionAttributeValues={
                     ':newJob': {
                         "query_execution_id": query_execution_id,

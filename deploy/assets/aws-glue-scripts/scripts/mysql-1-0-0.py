@@ -53,9 +53,11 @@ def directJDBCSource(
         print(f"SQL sampleQuery: {sql_query}")
         connection_options["sampleQuery"] = sql_query
         connection_options["enablePartitioningForSampleQuery"] = True
-        connection_options["hashfield"] = primary_key
-        # connection_options["hashexpression"] = f"MOD(UNIX_TIMESTAMP({partition_column}), {hash_partitions})"
         connection_options["hashpartitions"] = hash_partitions
+        if primary_key:
+            connection_options["hashfield"] = primary_key
+        else:
+            connection_options["hashexpression"] = f"MOD(UNIX_TIMESTAMP({partition_column}), {hash_partitions})"
 
     if redshiftTmpDir:
         connection_options["redshiftTmpDir"] = redshiftTmpDir

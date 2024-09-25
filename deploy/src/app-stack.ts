@@ -1443,7 +1443,14 @@ export class AppStack extends cdk.Stack {
         );
 
         stepFunctionValidationStepThree.role?.attachInlinePolicy(
-            new iam.Policy(this, 'StepFunctionValidationStepThreePolicy', {})
+            new iam.Policy(this, 'StepFunctionValidationStepThreePolicy', {
+                statements: [
+                    ssmGetParameterPolicy,
+                    dynamoDbWritePolicy,
+                    dynamoDbReadOnlyPolicy,
+                    secretsmanagerGetSecretValue,
+                ],
+            })
         );
 
         const stepFunctionValidationCount = new lambdaPython.PythonFunction(
@@ -1632,6 +1639,15 @@ export class AppStack extends cdk.Stack {
                         }).addRetry(retryPolicy)
                     )
             )
+        ).next(
+            new cdk.aws_stepfunctions_tasks.LambdaInvoke(
+                this, 
+                'Step Three - Output Validation',
+                {
+                    lambdaFunction: stepFunctionValidationStepThree,
+                    outputPath: '$.Payload',
+                }
+            ).addRetry(retryPolicy)
         );
 
         const validationLogGroup = new cdk.aws_logs.LogGroup(
